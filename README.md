@@ -2,7 +2,7 @@
 
 A privacy-first Pomodoro timer + ClickUp-style task manager that runs entirely in your browser. No account, no tracking, no sync. Everything stays on your device.
 
-![STUPInD icon](icon-192.png)
+<img src="icon-512.png" alt="STUPInD" width="120" />
 
 ## Features
 

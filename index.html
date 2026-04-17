@@ -345,6 +345,44 @@
   .view-toggle button{padding:5px 10px;background:transparent;border:none;color:#5a8ab5;font-size:10px;font-weight:600;letter-spacing:.5px;font-family:inherit;cursor:pointer;border-radius:4px;transition:.15s}
   .view-toggle button.active{background:linear-gradient(135deg,#1a3a5c,#1e4a6e);color:#e2e8f0}
 
+  /* Compact control bar: view toggle + filters button */
+  .task-controlbar{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    margin-bottom:8px;
+  }
+  .filters-toggle{
+    display:flex;align-items:center;gap:6px;
+    padding:6px 12px;min-height:34px;
+    background:var(--bg-2,#0d1a28);
+    border:1px solid var(--border,#1a2838);
+    border-radius:8px;
+    color:var(--text-2,#8a9bae);font-size:12px;font-weight:500;
+    font-family:inherit;cursor:pointer;transition:.15s;
+  }
+  .filters-toggle:hover,.filters-toggle.active{
+    background:var(--bg-3,#142238);color:var(--text-1,#e2e8f0);
+    border-color:var(--border-strong,#2a3a4a);
+  }
+  .filters-toggle .ft-icon{font-size:13px;opacity:.85}
+  .filters-toggle .ft-count{
+    background:var(--accent,#3b82f6);color:#0a1020;
+    font-size:10px;font-weight:700;
+    min-width:18px;height:18px;padding:0 5px;border-radius:9px;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+
+  /* Compact today banner (when shown) */
+  .today-banner-compact{
+    padding:8px 12px!important;
+    background:linear-gradient(135deg,rgba(61,139,204,.05),rgba(46,204,113,.03))!important;
+    border-radius:8px!important;
+    margin-bottom:8px!important;
+    gap:8px!important;
+  }
+  .today-banner-compact .tb-num{font-size:20px!important;line-height:1!important}
+  .today-banner-compact .tb-lbl{font-size:10px!important;opacity:.8}
+  .today-banner-compact .tb-divider{width:1px;background:var(--border,#1a2838);opacity:.5}
+
   /* Status badge */
   .status-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;transition:.15s;border:1px solid;font-family:inherit;white-space:nowrap}
   .status-badge:hover{filter:brightness(1.15)}
@@ -638,7 +676,7 @@
   /* Header — understated, not a shouty ALL-CAPS wall */
   .header{text-align:center;margin-bottom:28px}
   .header h1{font-size:22px;font-weight:700;letter-spacing:-.02em;text-transform:none;color:var(--text-1);font-family:var(--font-sans);margin:0;display:inline-flex;align-items:center;gap:10px}
-  .header h1::before{content:'';display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent)}
+  .header-logo{width:32px;height:32px;border-radius:8px;object-fit:contain;display:block;flex-shrink:0;filter:drop-shadow(0 0 8px rgba(61,139,204,.35))}
   .header-line{display:none}
   .header-date{font-size:13px;color:var(--text-3);letter-spacing:0;margin-top:6px;font-family:var(--font-sans)}
 
@@ -1278,7 +1316,7 @@
     /* Header - smaller on mobile */
     .header{margin-bottom:14px}
     .header h1{font-size:18px}
-    .header h1::before{width:8px;height:8px}
+    .header-logo{width:26px;height:26px}
     .header-date{font-size:12px;margin-top:2px}
 
     /* Banner (active-task tracker) - compact */
@@ -1653,7 +1691,7 @@
 <div class="container">
 
   <div class="header">
-    <h1>STUPInD</h1>
+    <h1><img src="icon-192.png" alt="" class="header-logo" width="32" height="32" onerror="this.style.display='none'">STUPInD</h1>
     <div class="header-date" id="headerDate"></div>
   </div>
 
@@ -1702,21 +1740,14 @@
       <span class="scnt" id="taskCountBadge">0 active</span>
     </div>
 
-    <!-- Today summary banner -->
-    <div class="today-banner" id="todayBanner">
-      <div class="tb-item"><div class="tb-num overdue" id="tbOverdue">0</div><div class="tb-lbl">Overdue</div></div>
-      <div class="tb-divider"></div>
-      <div class="tb-item"><div class="tb-num today" id="tbToday">0</div><div class="tb-lbl">Due Today</div></div>
-      <div class="tb-divider"></div>
-      <div class="tb-item"><div class="tb-num" id="tbWeek">0</div><div class="tb-lbl">This Week</div></div>
-      <div class="tb-divider"></div>
-      <div class="tb-item"><div class="tb-num done" id="tbDoneToday">0</div><div class="tb-lbl">Done Today</div></div>
+    <!-- Add task form: TOP — primary action -->
+    <div class="task-form">
+      <input class="task-input" id="taskInput" placeholder="Add a task... (try: Buy milk tomorrow @urgent #shopping)" onkeydown="if(event.key==='Enter')addTask()">
+      <button class="task-add" onclick="addTask()">+ Add</button>
     </div>
+    <div class="qa-hint">QUICK ADD: type <code>today</code>, <code>tomorrow</code>, <code>mon-sun</code> for due dates · <code>@urgent</code> <code>@high</code> <code>@low</code> for priority · <code>#tag</code> for tags · <code>!star</code> to pin · <code>~daily</code> <code>~weekly</code> for recurring</div>
 
-    <!-- Lists/Projects bar -->
-    <div class="lists-bar" id="listsBar"></div>
-
-    <!-- Smart Views -->
+    <!-- Smart views only — lightweight navigation -->
     <div class="smart-views" id="smartViews">
       <button class="sv-chip active" data-view="all" onclick="setSmartView('all')"><span class="sv-icon">☰</span>All<span class="sv-count" id="svcAll">0</span></button>
       <button class="sv-chip" data-view="today" onclick="setSmartView('today')"><span class="sv-icon">📅</span>Today<span class="sv-count" id="svcToday">0</span></button>
@@ -1728,8 +1759,22 @@
       <button class="sv-chip" data-view="archived" onclick="setSmartView('archived')"><span class="sv-icon">🗂</span>Archive<span class="sv-count" id="svcArchived">0</span></button>
     </div>
 
-    <!-- Toolbar: search, filter, sort, view -->
-    <div class="task-toolbar">
+    <!-- Compact control bar: view toggle + filters button -->
+    <div class="task-controlbar">
+      <div class="view-toggle">
+        <button class="active" id="viewList" onclick="setTaskView('list')">List</button>
+        <button id="viewBoard" onclick="setTaskView('board')">Board</button>
+        <button id="viewCal" onclick="setTaskView('calendar')">Cal</button>
+      </div>
+      <button class="filters-toggle" id="filtersToggle" onclick="toggleFiltersPanel()" title="Filters & sort">
+        <span class="ft-icon">⚙</span>
+        <span class="ft-label">Filters</span>
+        <span class="ft-count" id="filtersActiveCount" style="display:none">0</span>
+      </button>
+    </div>
+
+    <!-- Collapsible filter panel (hidden by default on mobile) -->
+    <div class="task-toolbar" id="filtersPanel" style="display:none">
       <input type="text" class="task-search" id="taskSearch" placeholder="🔍 Search tasks..." oninput="updateTaskFilters()">
       <div class="task-toolbar-row">
         <select class="task-tb-sel" id="filterStatus" onchange="updateTaskFilters()">
@@ -1767,19 +1812,21 @@
           <option value="list">Group: List</option>
         </select>
       </div>
-      <div class="view-toggle">
-        <button class="active" id="viewList" onclick="setTaskView('list')">List</button>
-        <button id="viewBoard" onclick="setTaskView('board')">Board</button>
-        <button id="viewCal" onclick="setTaskView('calendar')">Calendar</button>
-      </div>
     </div>
 
-    <!-- Add task form -->
-    <div class="task-form">
-      <input class="task-input" id="taskInput" placeholder="Add a task... (try: Buy milk tomorrow @urgent #shopping)" onkeydown="if(event.key==='Enter')addTask()">
-      <button class="task-add" onclick="addTask()">+ Add</button>
+    <!-- Lists bar: only if multiple lists exist -->
+    <div class="lists-bar" id="listsBar"></div>
+
+    <!-- Today banner: hidden when empty, compact when shown -->
+    <div class="today-banner today-banner-compact" id="todayBanner" style="display:none">
+      <div class="tb-item"><div class="tb-num overdue" id="tbOverdue">0</div><div class="tb-lbl">Overdue</div></div>
+      <div class="tb-divider"></div>
+      <div class="tb-item"><div class="tb-num today" id="tbToday">0</div><div class="tb-lbl">Today</div></div>
+      <div class="tb-divider"></div>
+      <div class="tb-item"><div class="tb-num" id="tbWeek">0</div><div class="tb-lbl">Week</div></div>
+      <div class="tb-divider"></div>
+      <div class="tb-item"><div class="tb-num done" id="tbDoneToday">0</div><div class="tb-lbl">Done</div></div>
     </div>
-    <div class="qa-hint">QUICK ADD: type <code>today</code>, <code>tomorrow</code>, <code>mon-sun</code> for due dates · <code>@urgent</code> <code>@high</code> <code>@low</code> for priority · <code>#tag</code> for tags · <code>!star</code> to pin · <code>~daily</code> <code>~weekly</code> for recurring</div>
 
     <!-- Archived notice (only shown in archive view) -->
     <div class="archived-notice" id="archivedNotice" style="display:none">
@@ -2764,6 +2811,13 @@ function renderLists(){
   const bar=gid('listsBar');if(!bar)return;
   ensureDefaultList();
   bar.innerHTML='';
+  // Hide the whole bar when there's only 1 list and no active task that needs switching context
+  // — reduces visual noise for simple single-list users
+  if(lists.length<=1){
+    bar.style.display='none';
+    return;
+  }
+  bar.style.display='';
   lists.forEach(l=>{
     const count=tasks.filter(t=>t.listId===l.id&&(!t.parentId)).length;
     const chip=document.createElement('button');
@@ -2787,6 +2841,7 @@ function updateTaskFilters(){
   taskFilters.priority=gid('filterPriority').value;
   taskSortBy=gid('taskSortSel').value;
   const g=gid('groupBySel');if(g)taskGroupBy=g.value;
+  updateFiltersActiveBadge();
   renderTaskList()
 }
 function setTaskView(v){
@@ -2877,6 +2932,34 @@ function renderTodayBanner(){
   if(gid('tbToday'))gid('tbToday').textContent=dueToday;
   if(gid('tbWeek'))gid('tbWeek').textContent=thisWeek;
   if(gid('tbDoneToday'))gid('tbDoneToday').textContent=doneToday;
+  // Hide entirely when all zero — reduces visual clutter for new users
+  const banner=gid('todayBanner');
+  if(banner){
+    const hasAny=overdue>0||dueToday>0||thisWeek>0||doneToday>0;
+    banner.style.display=hasAny?'':'none';
+  }
+}
+
+function toggleFiltersPanel(){
+  const panel=gid('filtersPanel');if(!panel)return;
+  const btn=gid('filtersToggle');
+  const isOpen=panel.style.display!=='none';
+  panel.style.display=isOpen?'none':'';
+  if(btn)btn.classList.toggle('active',!isOpen);
+}
+
+function updateFiltersActiveBadge(){
+  // Show a badge on the Filters button when any filter is non-default
+  const badge=gid('filtersActiveCount');if(!badge)return;
+  let count=0;
+  const s=gid('taskSearch'),st=gid('filterStatus'),pr=gid('filterPriority'),so=gid('taskSortSel'),gr=gid('groupBySel');
+  if(s&&s.value.trim())count++;
+  if(st&&st.value!=='all')count++;
+  if(pr&&pr.value!=='all')count++;
+  if(so&&so.value!=='manual'&&so.value!=='smart')count++;
+  if(gr&&gr.value!=='none')count++;
+  if(count>0){badge.textContent=count;badge.style.display='';}
+  else{badge.style.display='none';}
 }
 
 function renderSmartViewCounts(){
