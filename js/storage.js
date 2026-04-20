@@ -2,7 +2,7 @@
 // Internal keys keep stupind_* prefix so existing installs retain data after rebrand to ODTAULAI.
 const STORE_KEY     = 'stupind_state';
 const ARCHIVE_KEY   = 'stupind_archive';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 // Main nav tabs — single source for persisted activeTab + ?tab= deep links (see app.js)
 const VALID_MAIN_TABS = ['tasks','focus','tools','data','settings'];
@@ -80,9 +80,27 @@ function _repairTask(t){
     type:         _enum(t.type, ['task','bug','idea','errand','waiting'], 'task'),
     effort:       _enum(t.effort, ['xs','s','m','l','xl'], null) ?? null,
     energyLevel:  _enum(t.energyLevel, ['high','low'], null) ?? null,
-    context:      _enum(t.context, ['work','home','phone','computer','errands'], null) ?? null,
-    // v5 values alignment
-    category:     _enum(t.category, ['health','finance','work','relationships','learning','home','personal','other'], null) ?? null,
+    context:      (function(){
+      const c = t.context;
+      if(c == null || c === '') return null;
+      const s = String(c).trim();
+      if(!s) return null;
+      return s.length > 64 ? s.slice(0, 64) : s;
+    })(),
+    // v5 values alignment — category id is user-extensible (custom classifications)
+    category:     (function(){
+      const c = t.category;
+      if(c == null || c === '') return null;
+      const s = String(c).trim();
+      if(!s) return null;
+      return s.length > 64 ? s.slice(0, 64) : s;
+    })(),
+    completions:  _arr(t.completions).map(x => {
+      if(!x || typeof x !== 'object') return null;
+      return { date: _str(x.date, ''), sec: _int(x.sec, 0) };
+    }).filter(x => x && x.date),
+    habitLastRecordedTotalSec: (typeof t.habitLastRecordedTotalSec === 'number' && t.habitLastRecordedTotalSec >= 0)
+      ? Math.floor(t.habitLastRecordedTotalSec) : null,
     valuesAlignment: _arr(t.valuesAlignment).filter(x=>typeof x==='string'),
     valuesNote:   t.valuesNote ? _str(t.valuesNote) : null,
     // List membership
@@ -132,6 +150,20 @@ function migrateState(s){
       }));
     }catch(e){ console.warn('[migration v5]',e); }
   }
+  if(v < 6){
+    try{
+      if(Array.isArray(s.tasks)){
+        s.tasks = s.tasks.map(t => {
+          const o = _obj(t);
+          const base = { completions: [], ...o };
+          if(o.recur){
+            base.habitLastRecordedTotalSec = _int(o.totalSec, 0);
+          }
+          return base;
+        });
+      }
+    }catch(e){ console.warn('[migration v6]',e); }
+  }
 
   // ── Field-level repair pass — runs on EVERY load regardless of version ──────
   // This is the safety net: even if a migration was skipped or data was
@@ -173,7 +205,8 @@ function saveState(reason){
       // Cheap comparator — any field difference = changed
       const fieldsToCompare = ['name','status','priority','dueDate','startDate','description','tags',
         'starred','archived','completedAt','effort','energyLevel','context','category',
-        'valuesAlignment','parentId','listId','url','estimateMin','recur','remindAt','type','blockedBy'];
+        'valuesAlignment','parentId','listId','url','estimateMin','recur','remindAt','type','blockedBy',
+        'completions','habitLastRecordedTotalSec'];
       let changed = false;
       for (const f of fieldsToCompare){
         const a = JSON.stringify(t[f]);
@@ -258,6 +291,7 @@ function _applyState(s){
     // Config — repair individual values defensively
     if(s.cfg && typeof s.cfg==='object'){
       cfg = s.cfg;
+      if(typeof ensureClassificationConfig === 'function') ensureClassificationConfig(cfg);
       const cw=gid('cfgWork'); if(cw) cw.value = _int(cfg.work,25);
       const cs=gid('cfgShort');if(cs) cs.value = _int(cfg.short,5);
       const cl=gid('cfgLong'); if(cl) cl.value = _int(cfg.long,15);
@@ -267,6 +301,8 @@ function _applyState(s){
       setToggle('togSound', _bool(cfg.sound,true));
       setToggle('togLink',  _bool(cfg.linkTask,true));
       setToggle('togNotif', cfg.notif!==false);
+    } else if(typeof ensureClassificationConfig === 'function'){
+      ensureClassificationConfig(cfg);
     }
 
     // Goals
@@ -303,8 +339,8 @@ function _applyState(s){
     if(sortIn === 'order') sortIn = 'manual';
     let groupIn = s.taskGroupBy;
     if(groupIn === 'dueDate') groupIn = 'due';
-    const validSorts = ['smart','manual','priority','due','name','created','time'];
-    const validSmart = ['all','today','week','overdue','unscheduled','starred','completed','archived'];
+    const validSorts = ['smart','manual','priority','due','name','created','time','impact'];
+    const validSmart = ['all','today','week','overdue','unscheduled','starred','impact','completed','archived'];
     const validGroup = ['none','priority','status','due','list'];
     if(s.taskView   && validViews.includes(s.taskView))  taskView   = s.taskView;
     if(sortIn && validSorts.includes(sortIn)) taskSortBy = sortIn;
@@ -473,6 +509,8 @@ function _taskToExportRow(t){
     recur:           t.recur || null,
     reminderFired:   !!t.reminderFired,
     lastModified:    (typeof t.lastModified === 'number') ? t.lastModified : null,
+    completions:     Array.isArray(t.completions) ? t.completions : [],
+    habitLastRecordedTotalSec: (typeof t.habitLastRecordedTotalSec === 'number') ? t.habitLastRecordedTotalSec : null,
     // JSON-only rich fields (not in CSV columns but preserved in JSON export)
     _checklist:      checklist,
     _notes:          notes,
@@ -609,7 +647,7 @@ function _csvRowToTask(obj, existingTask){
   // Start from existing if we're updating, otherwise blank slate with defaults
   const base = existingTask ? {...existingTask} : {
     totalSec:0, sessions:0, tags:[], blockedBy:[], valuesAlignment:[],
-    checklist:[], notes:[],
+    checklist:[], notes:[], completions:[],
   };
   const T = {...base};
 
@@ -656,6 +694,11 @@ function _csvRowToTask(obj, existingTask){
   // checklist and notes — preserve if passed as arrays (JSON imports); CSV has counts only
   if(Array.isArray(obj.checklist)) T.checklist = obj.checklist;
   if(Array.isArray(obj.notes))     T.notes     = obj.notes;
+  if(Array.isArray(obj.completions)) T.completions = obj.completions;
+  if('habitLastRecordedTotalSec' in obj){
+    const h = parseInt(obj.habitLastRecordedTotalSec, 10);
+    T.habitLastRecordedTotalSec = (!isNaN(h) && h >= 0) ? h : null;
+  }
   return T;
 }
 

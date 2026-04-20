@@ -139,6 +139,12 @@
         <button id="viewBoard" onclick="setTaskView('board')">Board</button>
         <button id="viewCal" onclick="setTaskView('calendar')">Cal</button>
       </div>
+      <label class="task-tb-check" title="Show more chips on each row (category, values, duplicates)">
+        <input type="checkbox" id="cardDensityDetailed" onchange="onCardDensityToggle()"> Detailed
+      </label>
+      <label class="task-tb-check" title="Include completed tasks in the All view">
+        <input type="checkbox" id="showCompletedAll" onchange="onShowCompletedToggle()"> Show completed
+      </label>
       <button class="filters-toggle" id="filtersToggle" onclick="toggleFiltersPanel()" title="Filters & sort">
         <span class="ft-icon">⚙</span>
         <span class="ft-label">Filters</span>
@@ -175,14 +181,6 @@
       <div class="task-toolbar-row">
         <select class="task-tb-sel" id="filterCategory" onchange="updateTaskFilters()">
           <option value="all">Any category</option>
-          <option value="health">Health</option>
-          <option value="finance">Finance</option>
-          <option value="work">Work</option>
-          <option value="relationships">Relationships</option>
-          <option value="learning">Learning</option>
-          <option value="home">Home</option>
-          <option value="personal">Personal</option>
-          <option value="other">Other</option>
         </select>
       </div>
       <div class="task-toolbar-row">
@@ -289,13 +287,8 @@
     <div class="qt-list" id="qtList"><div class="iempty" id="qtEmpty">No quick timers — add one or tap a preset</div></div>
   </div>
 
-  <!-- Task understanding (on-device embeddings) -->
-  <div class="panel intel-tools-panel" data-tab="tools">
-    <div id="intelPanel" class="intel-panel-root"></div>
-  </div>
-
   <!-- Stopwatch -->
-  <div class="panel" data-tab="tools">
+  <div class="panel" data-tab="focus">
     <div class="shdr"><div class="sdot" style="background:#9b59b6"></div><span class="slbl">Stopwatch</span></div>
     <div style="text-align:center">
       <div id="swDisplay" style="font-size:42px;font-weight:800;color:#e2e8f0;letter-spacing:3px;font-variant-numeric:tabular-nums;margin-bottom:12px">00:00:00</div>
@@ -308,6 +301,23 @@
     </div>
   </div>
 
+  <!-- Intervals / repeating chimes -->
+  <div class="panel" data-tab="focus">
+    <div class="shdr"><div class="sdot" style="background:#3d8bcc"></div><span class="slbl">Repeating Chimes</span><span class="scnt" id="intCount">0 set</span></div>
+    <div class="iform">
+      <div style="flex:1 1 100px"><label class="fl">Label</label><input class="fi fi-w" id="intLabel" placeholder="e.g. Posture check"></div>
+      <div style="display:flex;gap:6px;align-items:flex-end"><div><label class="fl">Min</label><input type="number" class="fi fi-n" id="intMin" value="5" min="0" max="999"></div><div><label class="fl">Sec</label><input type="number" class="fi fi-n" id="intSec" value="0" min="0" max="59"></div></div>
+      <div><label class="fl">Sound</label><select class="fi fi-s" id="intChime"><option value="bell">Bell</option><option value="ping">Ping</option><option value="buzz">Buzz</option><option value="chord">Chord</option><option value="alarm">Alarm</option></select></div>
+      <div style="display:flex;gap:5px"><button type="button" class="iprev" onclick="playChime(gid('intChime').value)" title="Preview" data-icon="play"></button><button class="iadd" onclick="addInterval()">+ ADD</button></div>
+    </div>
+    <div class="ilist" id="intList"><div class="iempty" id="intEmpty">No chimes set</div></div>
+  </div>
+
+  <!-- Task understanding (on-device embeddings) -->
+  <div class="panel intel-tools-panel" data-tab="tools">
+    <div id="intelPanel" class="intel-panel-root"></div>
+  </div>
+
   <!-- Log -->
   <div class="panel" data-tab="data">
     <div class="shdr"><div class="sdot" style="background:var(--long)"></div><span class="slbl">Time Log</span><button class="small-btn" onclick="clearLog()">Clear</button></div>
@@ -318,69 +328,72 @@
   <div class="panel" data-tab="settings">
     <div class="stitle" onclick="toggleSettings()"><div class="sdot" style="background:#3d8bcc"></div><span class="slbl">Settings</span><span class="sarrow" id="settingsArrow">▼</span></div>
     <div class="sbody" id="settingsBody" style="max-height:0">
-      <div class="srow"><span class="sr-lbl">Focus Duration</span><input type="number" class="sinput" id="cfgWork" value="25" min="1" max="120" onchange="updateConfig()"><span class="sunit">min</span></div>
-      <div class="srow"><span class="sr-lbl">Short Break</span><input type="number" class="sinput" id="cfgShort" value="5" min="1" max="30" onchange="updateConfig()"><span class="sunit">min</span></div>
-      <div class="srow"><span class="sr-lbl">Long Break</span><input type="number" class="sinput" id="cfgLong" value="15" min="1" max="60" onchange="updateConfig()"><span class="sunit">min</span></div>
-      <div class="srow"><span class="sr-lbl">Sessions / Cycle</span><input type="number" class="sinput" id="cfgCycle" value="4" min="2" max="10" onchange="updateConfig()"></div>
-      <div class="srow"><span class="sr-lbl">Auto-start Breaks</span><div class="toggle on" id="togBreak" onclick="toggleOpt('togBreak')"><div class="tknob"></div></div></div>
-      <div class="srow"><span class="sr-lbl">Auto-start Focus</span><div class="toggle" id="togWork" onclick="toggleOpt('togWork')"><div class="tknob"></div></div></div>
-      <div class="srow"><span class="sr-lbl">Sound Alerts</span><div class="toggle on" id="togSound" onclick="toggleOpt('togSound')"><div class="tknob"></div></div></div>
-      <div class="srow"><span class="sr-lbl">Desktop Notifications</span><div class="toggle on" id="togNotif" onclick="toggleOpt('togNotif')"><div class="tknob"></div></div></div>
-      <div class="srow"><span class="sr-lbl">Link Task to Session</span><div class="toggle on" id="togLink" onclick="toggleOpt('togLink')"><div class="tknob"></div></div></div>
-
-      <!-- Background audio info -->
-      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:6px;padding:12px 0 14px;border-bottom:1px solid var(--border)">
-        <div style="display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between">
-          <span class="sr-lbl">Background Audio</span>
-          <span id="bgAudioStatus" style="font-size:11px;font-weight:600;color:var(--success)">● Active</span>
+      <details class="set-section" open>
+        <summary class="set-section-sum">General</summary>
+        <div class="set-section-body">
+          <div class="srow"><span class="sr-lbl">Focus Duration</span><input type="number" class="sinput" id="cfgWork" value="25" min="1" max="120" onchange="updateConfig()"><span class="sunit">min</span></div>
+          <div class="srow"><span class="sr-lbl">Short Break</span><input type="number" class="sinput" id="cfgShort" value="5" min="1" max="30" onchange="updateConfig()"><span class="sunit">min</span></div>
+          <div class="srow"><span class="sr-lbl">Long Break</span><input type="number" class="sinput" id="cfgLong" value="15" min="1" max="60" onchange="updateConfig()"><span class="sunit">min</span></div>
+          <div class="srow"><span class="sr-lbl">Sessions / Cycle</span><input type="number" class="sinput" id="cfgCycle" value="4" min="2" max="10" onchange="updateConfig()"></div>
+          <div class="srow"><span class="sr-lbl">Auto-start Breaks</span><div class="toggle on" id="togBreak" onclick="toggleOpt('togBreak')"><div class="tknob"></div></div></div>
+          <div class="srow"><span class="sr-lbl">Auto-start Focus</span><div class="toggle" id="togWork" onclick="toggleOpt('togWork')"><div class="tknob"></div></div></div>
+          <div class="srow"><span class="sr-lbl">Sound Alerts</span><div class="toggle on" id="togSound" onclick="toggleOpt('togSound')"><div class="tknob"></div></div></div>
+          <div class="srow"><span class="sr-lbl">Desktop Notifications</span><div class="toggle on" id="togNotif" onclick="toggleOpt('togNotif')"><div class="tknob"></div></div></div>
+          <div class="srow"><span class="sr-lbl">Link Task to Session</span><div class="toggle on" id="togLink" onclick="toggleOpt('togLink')"><div class="tknob"></div></div></div>
+          <div class="srow" style="flex-direction:column;align-items:flex-start;gap:6px;padding:12px 0 14px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:8px;width:100%;justify-content:space-between">
+              <span class="sr-lbl">Background Audio</span>
+              <span id="bgAudioStatus" style="font-size:11px;font-weight:600;color:var(--success)">● Active</span>
+            </div>
+            <span style="font-size:11px;color:var(--text-3);line-height:1.5;max-width:100%">
+              Chimes play while this tab is in the background via Web Audio scheduling + Media Session API. Sounds <strong>stop if the browser is fully closed</strong> — install as a PWA for reliable background operation.
+            </span>
+          </div>
         </div>
-        <span style="font-size:11px;color:var(--text-3);line-height:1.5;max-width:100%">
-          Chimes play while this tab is in the background via Web Audio scheduling + Media Session API. Sounds <strong>stop if the browser is fully closed</strong> — install as a PWA for reliable background operation.
-        </span>
-      </div>
+      </details>
 
-      <!-- Task understanding lives under Tools -->
-      <div class="srow" style="padding:14px 0 0;border-top:1px solid var(--border);margin-top:6px;justify-content:space-between;gap:10px">
-        <span class="sr-lbl" style="font-size:13px">Task understanding</span>
-        <button type="button" class="btn-ghost btn-sm" onclick="showTab('tools')" style="flex-shrink:0">Open in Tools →</button>
-      </div>
+      <details class="set-section">
+        <summary class="set-section-sum">Classifications</summary>
+        <div class="set-section-body">
+          <p style="font-size:11px;color:var(--text-3);line-height:1.5;margin:0 0 10px">Customize life categories and contexts. Task data stores stable ids; rename labels anytime.</p>
+          <div id="classificationManager"></div>
+        </div>
+      </details>
 
-      <!-- P2P Sync -->
-      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:10px;padding:14px 0 0;border-top:1px solid var(--border);margin-top:6px">
-        <span class="sr-lbl" style="font-size:12px;letter-spacing:.06em">Device Sync (Beta)</span>
-        <div id="syncPanel" style="width:100%"></div>
-      </div>
+      <details class="set-section">
+        <summary class="set-section-sum">Integrations</summary>
+        <div class="set-section-body">
+          <div class="srow" style="justify-content:space-between;gap:10px">
+            <span class="sr-lbl" style="font-size:13px">Task understanding</span>
+            <button type="button" class="btn-ghost btn-sm" onclick="showTab('tools')" style="flex-shrink:0">Open in Tools</button>
+          </div>
+          <div class="srow" style="flex-direction:column;align-items:flex-start;gap:10px;padding:14px 0 0;border-top:1px solid var(--border);margin-top:10px">
+            <span class="sr-lbl" style="font-size:12px;letter-spacing:.06em">Device Sync (Beta)</span>
+            <div id="syncPanel" style="width:100%"></div>
+          </div>
+          <div class="srow" style="flex-direction:column;align-items:flex-start;gap:10px;padding:14px 0 0;border-top:1px solid var(--border);margin-top:10px">
+            <span class="sr-lbl" style="font-size:12px;letter-spacing:.06em">Calendar Feeds</span>
+            <div id="calFeedsPanel" style="width:100%"></div>
+          </div>
+        </div>
+      </details>
 
-      <!-- Calendar Feeds (iCal import) -->
-      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:10px;padding:14px 0 0;border-top:1px solid var(--border);margin-top:6px">
-        <span class="sr-lbl" style="font-size:12px;letter-spacing:.06em">Calendar Feeds</span>
-        <div id="calFeedsPanel" style="width:100%"></div>
-      </div>
-      <div class="srow" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-        <span class="sr-lbl">Install as App</span>
-        <button id="installBtn" onclick="installPWA()" style="display:none;padding:8px 14px;background:var(--accent);color:#0a1320;border:none;border-radius:var(--r-sm);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer">＋ Install</button>
-        <span id="pwaStatus" style="font-size:11px;color:var(--text-3);letter-spacing:0;text-align:right;max-width:200px"></span>
-      </div>
-
-      <!-- System Info — version, storage, quota -->
-      <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;padding:14px 0 10px;border-top:1px solid var(--border);margin-top:10px">
-        <span class="sr-lbl" style="font-size:12px;letter-spacing:.06em">System</span>
-        <div id="systemInfo" style="font-size:11px;color:var(--text-3);line-height:1.6;font-variant-numeric:tabular-nums">Loading…</div>
-        <button onclick="checkStorageQuota().then(renderSystemInfo)" style="align-self:flex-start;background:none;border:1px solid var(--border);color:var(--text-3);padding:4px 10px;border-radius:4px;font-size:10px;font-family:inherit;cursor:pointer">Refresh</button>
-      </div>
+      <details class="set-section">
+        <summary class="set-section-sum">About</summary>
+        <div class="set-section-body">
+          <div class="srow" style="margin-top:0;padding-top:0;border-top:none">
+            <span class="sr-lbl">Install as App</span>
+            <button id="installBtn" onclick="installPWA()" style="display:none;padding:8px 14px;background:var(--accent);color:#0a1320;border:none;border-radius:var(--r-sm);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer">＋ Install</button>
+            <span id="pwaStatus" style="font-size:11px;color:var(--text-3);letter-spacing:0;text-align:right;max-width:200px"></span>
+          </div>
+          <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;padding:14px 0 10px;border-top:1px solid var(--border);margin-top:10px">
+            <span class="sr-lbl" style="font-size:12px;letter-spacing:.06em">System</span>
+            <div id="systemInfo" style="font-size:11px;color:var(--text-3);line-height:1.6;font-variant-numeric:tabular-nums">Loading…</div>
+            <button onclick="checkStorageQuota().then(renderSystemInfo)" style="align-self:flex-start;background:none;border:1px solid var(--border);color:var(--text-3);padding:4px 10px;border-radius:4px;font-size:10px;font-family:inherit;cursor:pointer">Refresh</button>
+          </div>
+        </div>
+      </details>
     </div>
-  </div>
-
-  <!-- Intervals -->
-  <div class="panel" data-tab="tools">
-    <div class="shdr"><div class="sdot" style="background:#3d8bcc"></div><span class="slbl">Repeating Chimes</span><span class="scnt" id="intCount">0 set</span></div>
-    <div class="iform">
-      <div style="flex:1 1 100px"><label class="fl">Label</label><input class="fi fi-w" id="intLabel" placeholder="e.g. Posture check"></div>
-      <div style="display:flex;gap:6px;align-items:flex-end"><div><label class="fl">Min</label><input type="number" class="fi fi-n" id="intMin" value="5" min="0" max="999"></div><div><label class="fl">Sec</label><input type="number" class="fi fi-n" id="intSec" value="0" min="0" max="59"></div></div>
-      <div><label class="fl">Sound</label><select class="fi fi-s" id="intChime"><option value="bell">Bell</option><option value="ping">Ping</option><option value="buzz">Buzz</option><option value="chord">Chord</option><option value="alarm">Alarm</option></select></div>
-      <div style="display:flex;gap:5px"><button class="iprev" onclick="playChime(gid('intChime').value)">🔊</button><button class="iadd" onclick="addInterval()">+ ADD</button></div>
-    </div>
-    <div class="ilist" id="intList"><div class="iempty" id="intEmpty">No chimes set</div></div>
   </div>
 
   <!-- Stats & Export -->
@@ -535,64 +548,26 @@
         </div>
       </div>
 
-      <div class="mfield">
-        <div class="mfield-lbl">Type</div>
-        <div class="mfield-chips" id="mdTypeChips"></div>
-      </div>
-
-      <div class="mfield">
-        <div class="mfield-lbl">Life Category</div>
-        <div class="mfield-chips" id="mdCategoryChips"></div>
-        <div id="mdValuesNote" style="font-size:11px;color:var(--text-3);margin-top:4px;font-style:italic"></div>
-      </div>
-
-      <div class="mfield-row">
-        <div class="mfield">
-          <div class="mfield-lbl">Effort</div>
-          <div class="mfield-chips" id="mdEffortChips"></div>
-        </div>
-        <div class="mfield">
-          <div class="mfield-lbl">Energy</div>
-          <div class="mfield-chips" id="mdEnergyChips"></div>
-        </div>
-      </div>
-
-      <div class="mfield">
-        <div class="mfield-lbl">Context</div>
-        <div class="mfield-chips" id="mdContextChips"></div>
-      </div>
-
-      <div class="mfield-row">
-        <div class="mfield">
-          <div class="mfield-lbl">List</div>
-          <select class="mfield-in" id="mdList"></select>
-        </div>
-        <div class="mfield">
-          <div class="mfield-lbl">Start Date</div>
-          <input type="date" class="mfield-in" id="mdStartDate">
-        </div>
-      </div>
-
       <div class="mfield-row">
         <div class="mfield">
           <div class="mfield-lbl">Due Date</div>
           <input type="date" class="mfield-in" id="mdDue">
           <div class="quick-dates">
-            <button class="qd-btn" onclick="setQuickDate(0)">Today</button>
-            <button class="qd-btn" onclick="setQuickDate(1)">Tomorrow</button>
-            <button class="qd-btn" onclick="setQuickDate(7)">+1 Week</button>
-            <button class="qd-btn" onclick="setQuickDate('clear')">Clear</button>
+            <button type="button" class="qd-btn" onclick="setQuickDate(0)">Today</button>
+            <button type="button" class="qd-btn" onclick="setQuickDate(1)">Tomorrow</button>
+            <button type="button" class="qd-btn" onclick="setQuickDate(7)">+1 Week</button>
+            <button type="button" class="qd-btn" onclick="setQuickDate('clear')">Clear</button>
           </div>
         </div>
         <div class="mfield">
           <div class="mfield-lbl">Remind me at</div>
           <input type="datetime-local" class="mfield-in" id="mdRemindAt">
           <div class="quick-dates">
-            <button class="qd-btn" onclick="setQuickReminder(0,9)">9am</button>
-            <button class="qd-btn" onclick="setQuickReminder(0,17)">5pm</button>
-            <button class="qd-btn" onclick="setQuickReminder(1,9)">Tmrw 9am</button>
-            <button class="qd-btn" onclick="setQuickReminder('due',9)">Due 9am</button>
-            <button class="qd-btn" onclick="setQuickReminder('clear')">Clear</button>
+            <button type="button" class="qd-btn" onclick="setQuickReminder(0,9)">9am</button>
+            <button type="button" class="qd-btn" onclick="setQuickReminder(0,17)">5pm</button>
+            <button type="button" class="qd-btn" onclick="setQuickReminder(1,9)">Tmrw 9am</button>
+            <button type="button" class="qd-btn" onclick="setQuickReminder('due',9)">Due 9am</button>
+            <button type="button" class="qd-btn" onclick="setQuickReminder('clear')">Clear</button>
           </div>
         </div>
       </div>
@@ -602,60 +577,109 @@
         <div class="recur-options" id="mdRecur"></div>
       </div>
 
-      <div class="mfield-row">
-        <div class="mfield">
-          <div class="mfield-lbl">Time Estimate (min)</div>
-          <input type="number" class="mfield-in" id="mdEstimate" placeholder="0" min="0">
-        </div>
-        <div class="mfield">
-          <div class="mfield-lbl">Time Tracked</div>
-          <div class="mfield-in" id="mdTracked" style="background:#0a1320;cursor:default">—</div>
-        </div>
-      </div>
-
-      <div class="mfield">
-        <div class="mfield-lbl">Reference URL</div>
-        <input type="url" class="mfield-in" id="mdUrl" placeholder="https://…">
-      </div>
-
-      <div class="mfield">
-        <div class="mfield-lbl">Tags</div>
-        <div class="tags-editor" id="mdTagsEditor"></div>
-      </div>
-
-      <div class="mfield">
-        <div class="mfield-lbl">Waiting on (blocked by)</div>
-        <div id="mdBlockedBy"></div>
-      </div>
-
-      <div class="mfield md-similar-wrap">
-        <button type="button" class="similar-acc-trigger" id="mdSimilarTrigger" onclick="toggleSimilarAccordion()">
-          <span>Similar tasks</span><span class="similar-acc-chevron">▼</span>
-        </button>
-        <div class="similar-acc-panel" id="mdSimilarAccordion">
-          <div id="mdSimilarTasks" class="md-similar-tasks"></div>
-        </div>
-      </div>
-
-      <div class="mfield">
-        <div class="mfield-lbl">Checklist</div>
-        <div id="mdChecklist"></div>
-      </div>
-
       <div class="mfield">
         <div class="mfield-lbl">Description</div>
         <textarea class="mfield-textarea" id="mdDesc" placeholder="Context, acceptance criteria, links…"></textarea>
       </div>
 
-      <div class="mfield">
-        <div class="mfield-lbl">Timestamped Notes</div>
-        <div id="mdNotes"></div>
-      </div>
+      <details class="md-section">
+        <summary class="md-section-sum">Tags &amp; list</summary>
+        <div class="md-section-body">
+          <div class="mfield">
+            <div class="mfield-lbl">Tags</div>
+            <div class="tags-editor" id="mdTagsEditor"></div>
+          </div>
+          <div class="mfield-row">
+            <div class="mfield">
+              <div class="mfield-lbl">List</div>
+              <select class="mfield-in" id="mdList"></select>
+            </div>
+            <div class="mfield">
+              <div class="mfield-lbl">Start Date</div>
+              <input type="date" class="mfield-in" id="mdStartDate">
+            </div>
+          </div>
+        </div>
+      </details>
 
-      <div class="mfield" id="mdCompletionNoteWrap">
-        <div class="mfield-lbl">Completion note</div>
-        <textarea class="mfield-textarea" id="mdCompletionNote" rows="2" placeholder="What actually happened…"></textarea>
-      </div>
+      <details class="md-section">
+        <summary class="md-section-sum">Tracking</summary>
+        <div class="md-section-body">
+          <div class="mfield-row">
+            <div class="mfield">
+              <div class="mfield-lbl">Time Estimate (min)</div>
+              <input type="number" class="mfield-in" id="mdEstimate" placeholder="0" min="0">
+            </div>
+            <div class="mfield">
+              <div class="mfield-lbl">Time Tracked</div>
+              <div class="mfield-in" id="mdTracked" style="background:#0a1320;cursor:default">—</div>
+            </div>
+          </div>
+          <div class="mfield" id="mdCompletionNoteWrap">
+            <div class="mfield-lbl">Completion note</div>
+            <textarea class="mfield-textarea" id="mdCompletionNote" rows="2" placeholder="What actually happened…"></textarea>
+          </div>
+          <div class="mfield">
+            <div class="mfield-lbl">Completion history (repeating tasks)</div>
+            <div id="mdHabitLog" class="md-habit-log"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="md-section">
+        <summary class="md-section-sum">Classification</summary>
+        <div class="md-section-body">
+          <div class="mfield">
+            <div class="mfield-lbl">Life Category</div>
+            <div class="mfield-chips" id="mdCategoryChips"></div>
+            <div id="mdValuesNote" style="font-size:11px;color:var(--text-3);margin-top:4px;font-style:italic"></div>
+          </div>
+          <div class="mfield-row">
+            <div class="mfield">
+              <div class="mfield-lbl">Effort</div>
+              <div class="mfield-chips" id="mdEffortChips"></div>
+            </div>
+            <div class="mfield">
+              <div class="mfield-lbl">Energy</div>
+              <div class="mfield-chips" id="mdEnergyChips"></div>
+            </div>
+          </div>
+          <div class="mfield">
+            <div class="mfield-lbl">Context</div>
+            <div class="mfield-chips" id="mdContextChips"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="md-section">
+        <summary class="md-section-sum">Links &amp; more</summary>
+        <div class="md-section-body">
+          <div class="mfield">
+            <div class="mfield-lbl">Reference URL</div>
+            <input type="url" class="mfield-in" id="mdUrl" placeholder="https://…">
+          </div>
+          <div class="mfield">
+            <div class="mfield-lbl">Waiting on (blocked by)</div>
+            <div id="mdBlockedBy"></div>
+          </div>
+          <div class="mfield md-similar-wrap">
+            <button type="button" class="similar-acc-trigger" id="mdSimilarTrigger" onclick="toggleSimilarAccordion()">
+              <span>Similar tasks</span><span class="similar-acc-chevron">▼</span>
+            </button>
+            <div class="similar-acc-panel" id="mdSimilarAccordion">
+              <div id="mdSimilarTasks" class="md-similar-tasks"></div>
+            </div>
+          </div>
+          <div class="mfield">
+            <div class="mfield-lbl">Checklist</div>
+            <div id="mdChecklist"></div>
+          </div>
+          <div class="mfield">
+            <div class="mfield-lbl">Timestamped Notes</div>
+            <div id="mdNotes"></div>
+          </div>
+        </div>
+      </details>
 
     </div>
     <div class="modal-foot">

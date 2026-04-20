@@ -136,19 +136,12 @@ function executeIntelOp(op){
     }
     case 'MARK_DONE':{
       const t = findTask(a.id); if(!t) return null;
-      const beforeLen = tasks.length;
       snap = { type: 'updated', id: t.id, before: { ...t } };
-      t.status = 'done'; t.completedAt = timeNow();
       if(a.completionNote) t.completionNote = String(a.completionNote);
-      if(t.recur){
-        spawnRecurringClone(t);
-        if(tasks.length > beforeLen){
-          const cloneId = tasks[tasks.length - 1].id;
-          snap = { type: 'batch', snaps: [
-            { type: 'updated', id: t.id, before: snap.before },
-            { type: 'created', id: cloneId },
-          ] };
-        }
+      if(t.recur && typeof completeHabitCycle === 'function'){
+        completeHabitCycle(t);
+      } else {
+        t.status = 'done'; t.completedAt = timeNow();
       }
       break;
     }
@@ -558,13 +551,18 @@ function _renderBreakdown(){
     if(t.priority === 'urgent') by[t.category].urgent++;
     if(t.priority === 'high') by[t.category].high++;
   });
-  const rows = Object.entries(by).sort((x, y) => y[1].count - x[1].count).map(([c, s]) => `
+  const rows = Object.entries(by).sort((x, y) => y[1].count - x[1].count).map(([c, s]) => {
+    const def = (typeof getCategoryDef === 'function') ? getCategoryDef(c) : null;
+    const lbl = def ? def.label : c;
+    const icn = def ? def.icon : (CAT_ICON[c] || 'pin');
+    return `
     <div class="breakdown-row">
-      <span class="breakdown-cat"><span class="breakdown-cat-ic">${(window.icon && window.icon(CAT_ICON[c] || 'pin', {size:14})) || ''}</span> ${c}</span>
+      <span class="breakdown-cat"><span class="breakdown-cat-ic">${(window.icon && window.icon(icn, {size:14})) || ''}</span> ${esc(lbl)}</span>
       <span class="breakdown-count">${s.count}</span>
       ${s.urgent ? `<span class="breakdown-badge urgent">${s.urgent}!</span>` : ''}
       ${s.high ? `<span class="breakdown-badge high">${s.high}↑</span>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   el.innerHTML = rows || '<span style="color:var(--text-3);font-size:12px">Run alignment to see</span>';
 }
 
@@ -931,16 +929,14 @@ async function smartAddEnhance(){
   try{
     const sugg = await predictMetadata(raw, 5);
     const PR = ['urgent','high','normal','low','none'];
-    const CAT = LIFE_CATS;
     const EFF = ['xs','s','m','l','xl'];
-    const CTX = ['work','home','phone','computer','errands'];
     const EN = ['high','low'];
 
     const cleaned = {};
     if(sugg.priority && PR.includes(sugg.priority) && sugg.priority !== 'none') cleaned.priority = sugg.priority;
-    if(sugg.category && CAT.includes(sugg.category)) cleaned.category = sugg.category;
+    if(sugg.category && typeof hasClassificationCategory === 'function' && hasClassificationCategory(sugg.category)) cleaned.category = sugg.category;
     if(sugg.effort && EFF.includes(sugg.effort)) cleaned.effort = sugg.effort;
-    if(sugg.context && CTX.includes(sugg.context)) cleaned.context = sugg.context;
+    if(sugg.context && typeof hasClassificationContext === 'function' && hasClassificationContext(sugg.context)) cleaned.context = sugg.context;
     if(sugg.energyLevel && EN.includes(sugg.energyLevel)) cleaned.energyLevel = sugg.energyLevel;
     if(Array.isArray(sugg.tags)) cleaned.tags = sugg.tags.filter(t => typeof t === 'string' && t.length && t.length < 25).slice(0, 5);
     if(sugg.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(sugg.dueDate)) cleaned.dueDate = sugg.dueDate;
@@ -970,7 +966,12 @@ function _renderSmartAddChips(s){
   const chips = [];
   if(s.priority) chips.push(`<span class="sa-chip sa-priority sa-p-${s.priority}" data-tip="Priority — tap to remove" onclick="smartAddRemove('priority')">priority: ${s.priority} ×</span>`);
   const ic = (n, size) => (window.icon && window.icon(n, {size: size||13})) || '';
-  if(s.category) chips.push(`<span class="sa-chip" data-tip="Category — tap to remove" onclick="smartAddRemove('category')"><span class="sa-chip-ic">${ic(CAT_ICON[s.category] || 'pin')}</span> ${s.category} ×</span>`);
+  if(s.category){
+    const cdef = (typeof getCategoryDef === 'function') ? getCategoryDef(s.category) : null;
+    const catLbl = cdef ? cdef.label : s.category;
+    const catIc = (cdef && cdef.icon) || CAT_ICON[s.category] || 'pin';
+    chips.push(`<span class="sa-chip" data-tip="Category — tap to remove" onclick="smartAddRemove('category')"><span class="sa-chip-ic">${ic(catIc)}</span> ${esc(catLbl)} ×</span>`);
+  }
   if(s.effort) chips.push(`<span class="sa-chip" data-tip="${effortTips[s.effort] || 'Effort'} — tap to remove" onclick="smartAddRemove('effort')">effort: ${s.effort.toUpperCase()} ×</span>`);
   if(s.context) chips.push(`<span class="sa-chip" data-tip="${ctxTips[s.context] || 'Context'} — tap to remove" onclick="smartAddRemove('context')">${s.context} ×</span>`);
   if(s.energyLevel) chips.push(`<span class="sa-chip" data-tip="Energy — tap to remove" onclick="smartAddRemove('energyLevel')"><span class="sa-chip-ic">${ic(s.energyLevel === 'high' ? 'flame' : 'leaf')}</span> ${s.energyLevel} ×</span>`);

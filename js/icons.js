@@ -105,10 +105,12 @@
       title + body + '</svg>';
   }
 
-  /** Icon for a life-category key (or null if unknown). */
+  /** Icon for a life-category id (uses getCategoryDef when loaded). */
   function categoryIcon(key, opts){
-    const k = CATEGORY_ICON[key];
-    return k ? icon(k, opts) : '';
+    if(!key) return '';
+    const def = (typeof window.getCategoryDef === 'function') ? window.getCategoryDef(key) : null;
+    const k = def ? def.icon : CATEGORY_ICON[key];
+    return k ? icon(k, opts) : icon('pin', opts);
   }
 
   /**

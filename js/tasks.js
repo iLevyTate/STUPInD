@@ -126,9 +126,11 @@ function defaultTaskProps(){return{
   type:'task',effort:null,energyLevel:null,context:null,
   blockedBy:[],checklist:[],notes:[],url:null,completionNote:null,
   // v5 — values alignment
-  category:null,        // life area: health|finance|work|relationships|learning|home|personal|other
+  category:null,        // life area id (customizable in Settings)
   valuesAlignment:[],   // which user values this task serves e.g. ['security','benevolence']
-  valuesNote:null       // Short note from values alignment
+  valuesNote:null,      // Short note from values alignment
+  completions:[],      // recurring habit log: { date, sec }
+  habitLastRecordedTotalSec:null, // baseline for per-completion delta (see completeHabitCycle)
 }}
 
 let _dupRefreshTimer = null;
@@ -553,7 +555,7 @@ setInterval(checkReminders,30000);
 // And once on load
 setTimeout(checkReminders,1000);
 
-// Recurring tasks — when a recurring task is marked done, clone it with next due date
+// Recurring tasks — advance due date for habit-in-place completions
 function advanceRecurringDate(dateStr,recurType){
   const d=dateStr?new Date(dateStr+'T12:00:00'):new Date();
   if(recurType==='daily')d.setDate(d.getDate()+1);
@@ -565,21 +567,47 @@ function advanceRecurringDate(dateStr,recurType){
   else if(recurType==='monthly')d.setMonth(d.getMonth()+1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-function spawnRecurringClone(t){
-  if(!t.recur)return;
-  const newDue=advanceRecurringDate(t.dueDate||todayISO(),t.recur);
-  tasks.push({
-    id:++taskIdCtr,name:t.name,totalSec:0,sessions:0,created:timeNowFull(),
-    parentId:t.parentId,collapsed:false,archived:false,completedAt:null,
-    status:'open',priority:t.priority,tags:[...(t.tags||[])],
-    dueDate:newDue,startDate:null,estimateMin:t.estimateMin,
-    description:t.description,starred:t.starred,listId:t.listId,
-    recur:t.recur,order:Date.now(),remindAt:null,reminderFired:false,
-    type:t.type||'task',effort:t.effort||null,energyLevel:t.energyLevel||null,
-    context:t.context||null,blockedBy:[],checklist:[],notes:[],
-    url:t.url||null,completionNote:null,
-    category:t.category||null,valuesAlignment:[...(t.valuesAlignment||[])],valuesNote:null,
-  });
+
+/** @deprecated v24 — use completeHabitCycle (single card + completions[]) */
+function spawnRecurringClone(_t){}
+
+/** Log one habit cycle: time since last log, stay open, next due. */
+function completeHabitCycle(t){
+  if(!t||!t.recur)return;
+  if(!Array.isArray(t.completions))t.completions=[];
+  const base=(typeof t.habitLastRecordedTotalSec==='number'&&t.habitLastRecordedTotalSec>=0)
+    ?t.habitLastRecordedTotalSec:0;
+  const nowSec=getTaskElapsed(t);
+  const delta=Math.max(0,nowSec-base);
+  t.completions.push({date:todayISO(),sec:delta});
+  t.habitLastRecordedTotalSec=nowSec;
+  t.status='open';
+  t.completedAt=null;
+  t.dueDate=advanceRecurringDate(t.dueDate||todayISO(),t.recur);
+}
+
+function getHabitStreak(t){
+  if(!t||!t.recur||!Array.isArray(t.completions)||!t.completions.length)return 0;
+  const days=new Set(t.completions.map(c=>c&&c.date).filter(Boolean));
+  const sorted=[...days].sort();
+  if(!sorted.length)return 0;
+  const d=new Date(sorted[sorted.length-1]+'T12:00:00');
+  let streak=1;
+  while(true){
+    d.setDate(d.getDate()-1);
+    const prev=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(days.has(prev))streak++;
+    else break;
+  }
+  return streak;
+}
+
+function getHabitLoggedSecTotal(t){
+  if(!t||!Array.isArray(t.completions))return 0;
+  return t.completions.reduce((a,c)=>{
+    const x=parseInt(c&&c.sec,10);
+    return a+(isNaN(x)?0:x);
+  },0);
 }
 
 // Status/Priority quick-change
@@ -587,9 +615,13 @@ function cycleStatus(id){
   event&&event.stopPropagation();
   const t=findTask(id);if(!t)return;
   const idx=STATUS_ORDER.indexOf(t.status||'open');
-  t.status=STATUS_ORDER[(idx+1)%STATUS_ORDER.length];
-  if(t.status==='done')t.completedAt=timeNow();
-  else t.completedAt=null;
+  const next=STATUS_ORDER[(idx+1)%STATUS_ORDER.length];
+  if(next==='done'&&t.recur){completeHabitCycle(t)}
+  else{
+    t.status=next;
+    if(t.status==='done')t.completedAt=timeNow();
+    else t.completedAt=null;
+  }
   renderTaskList();saveState('user')
 }
 
@@ -598,9 +630,13 @@ function toggleTaskDoneQuick(id){
   const t=findTask(id);if(!t)return;
   if(t.status==='done'){t.status='open';t.completedAt=null}
   else{
-    t.status='done';t.completedAt=timeNow();
-    if(activeTaskId===id){toggleTask(id)}
-    if(t.recur)spawnRecurringClone(t);
+    if(t.recur){
+      completeHabitCycle(t);
+      if(activeTaskId===id){/* keep timer running on same task */ }
+    }else{
+      t.status='done';t.completedAt=timeNow();
+      if(activeTaskId===id){toggleTask(id)}
+    }
     haptic(15);
     // Dopamine: animate the row + a little sparkle
     setTimeout(()=>{
@@ -775,6 +811,10 @@ function matchesFilters(t){
   else if(smartView==='starred'){if(!t.starred||t.status==='done')return false}
   else if(smartView==='impact'){if(t.status==='done'||!_paretoTopSet.has(t.id))return false}
   else if(smartView==='completed'){if(t.status!=='done')return false}
+  if(smartView==='all'){
+    const sd=gid('showCompletedAll');
+    if((!sd||!sd.checked)&&t.status==='done')return false;
+  }
   // Search — semantic (cosine) or substring
   if(taskFilters.search){
     const semActive = window._taskSearchSemantic && window._semanticScores && window._semanticScores.size > 0;
@@ -879,6 +919,9 @@ function updateFiltersActiveBadge(){
   if(pr&&pr.value!=='all')count++;
   if(so&&so.value!=='manual'&&so.value!=='smart')count++;
   if(gr&&gr.value!=='none')count++;
+  const cat=gid('filterCategory');if(cat&&cat.value!=='all')count++;
+  const sc=gid('showCompletedAll');if(sc&&sc.checked)count++;
+  const cd=gid('cardDensityDetailed');if(cd&&cd.checked)count++;
   if(count>0){badge.textContent=count;badge.style.display='';}
   else{badge.style.display='none';}
 }
@@ -891,7 +934,7 @@ function renderSmartViewCounts(){
   const weekAhead=new Date();weekAhead.setDate(weekAhead.getDate()+7);
   const weekEnd=weekAhead.getFullYear()+'-'+String(weekAhead.getMonth()+1).padStart(2,'0')+'-'+String(weekAhead.getDate()).padStart(2,'0');
   const set=(id,n)=>{const el=gid(id);if(el)el.textContent=n};
-  set('svcAll',active.length);
+  set('svcAll',activeNotDone.length);
   set('svcToday',activeNotDone.filter(t=>t.dueDate===today).length);
   set('svcWeek',activeNotDone.filter(t=>t.dueDate&&t.dueDate>=today&&t.dueDate<=weekEnd).length);
   set('svcOverdue',activeNotDone.filter(t=>t.dueDate&&t.dueDate<today).length);
@@ -1139,3 +1182,40 @@ function renderBlockedBy(taskId){
   const inp = typeof gid === 'function' ? gid('taskInput') : null;
   if(inp) inp.addEventListener('paste', taskInputPaste);
 })();
+
+function getCardDensity(){
+  try{ return localStorage.getItem('stupind_card_density') === 'detailed' ? 'detailed' : 'compact'; }
+  catch(e){ return 'compact'; }
+}
+function onCardDensityToggle(){
+  const el = gid('cardDensityDetailed');
+  const on = el && el.checked;
+  try{ localStorage.setItem('stupind_card_density', on ? 'detailed' : 'compact'); }catch(e){}
+  if(typeof updateFiltersActiveBadge === 'function') updateFiltersActiveBadge();
+  renderTaskList();
+}
+function onShowCompletedToggle(){
+  try{
+    const sc = gid('showCompletedAll');
+    localStorage.setItem('stupind_show_done_all', sc && sc.checked ? '1' : '0');
+  }catch(e){}
+  updateTaskFilters();
+}
+function restoreTaskToolbarPrefs(){
+  const sc = gid('showCompletedAll');
+  if(sc){
+    try{ sc.checked = localStorage.getItem('stupind_show_done_all') === '1'; }catch(e){}
+  }
+  const cd = gid('cardDensityDetailed');
+  if(cd){
+    try{ cd.checked = localStorage.getItem('stupind_card_density') === 'detailed'; }catch(e){}
+  }
+}
+
+window.getCardDensity = getCardDensity;
+window.onCardDensityToggle = onCardDensityToggle;
+window.onShowCompletedToggle = onShowCompletedToggle;
+window.restoreTaskToolbarPrefs = restoreTaskToolbarPrefs;
+window.completeHabitCycle = completeHabitCycle;
+window.getHabitStreak = getHabitStreak;
+window.getHabitLoggedSecTotal = getHabitLoggedSecTotal;

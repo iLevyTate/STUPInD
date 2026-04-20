@@ -25,6 +25,223 @@ window.CAT_ICON = CAT_ICON;
 window.SCHWARTZ = SCHWARTZ;
 window.VALUE_KEYS = VALUE_KEYS;
 
+const DEFAULT_CATEGORY_DEFS = [
+  { id: 'health', label: 'Health', icon: 'heart' },
+  { id: 'finance', label: 'Finance', icon: 'dollar' },
+  { id: 'work', label: 'Work', icon: 'briefcase' },
+  { id: 'relationships', label: 'Relationships', icon: 'users' },
+  { id: 'learning', label: 'Learning', icon: 'book' },
+  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'personal', label: 'Personal', icon: 'leaf' },
+  { id: 'other', label: 'Other', icon: 'pin' },
+];
+const DEFAULT_CONTEXT_DEFS = [
+  { id: 'work', label: 'Work', icon: 'briefcase' },
+  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'phone', label: 'Phone', icon: 'phone' },
+  { id: 'computer', label: 'Computer', icon: 'monitor' },
+  { id: 'errands', label: 'Errands', icon: 'car' },
+];
+
+function ensureClassificationConfig(c){
+  if(!c || typeof c !== 'object') return;
+  if(!Array.isArray(c.categories) || !c.categories.length){
+    c.categories = DEFAULT_CATEGORY_DEFS.map(x => ({ ...x, hidden: false }));
+  } else {
+    c.categories = c.categories.map(row => ({
+      id: String(row.id || '').trim().slice(0, 64) || null,
+      label: String(row.label || row.id || '').trim().slice(0, 80) || '',
+      icon: String(row.icon || 'pin').trim() || 'pin',
+      hidden: !!row.hidden,
+    })).filter(r => r.id);
+    if(!c.categories.length){
+      c.categories = DEFAULT_CATEGORY_DEFS.map(x => ({ ...x, hidden: false }));
+    }
+  }
+  if(!Array.isArray(c.contexts) || !c.contexts.length){
+    c.contexts = DEFAULT_CONTEXT_DEFS.map(x => ({ ...x, hidden: false }));
+  } else {
+    c.contexts = c.contexts.map(row => ({
+      id: String(row.id || '').trim().slice(0, 64) || null,
+      label: String(row.label || row.id || '').trim().slice(0, 80) || '',
+      icon: String(row.icon || 'pin').trim() || 'pin',
+      hidden: !!row.hidden,
+    })).filter(r => r.id);
+    if(!c.contexts.length){
+      c.contexts = DEFAULT_CONTEXT_DEFS.map(x => ({ ...x, hidden: false }));
+    }
+  }
+}
+
+function hasClassificationCategory(cat){
+  if(!cat) return false;
+  if(LIFE_CATS.includes(cat)) return true;
+  if(typeof cfg === 'undefined' || !cfg) return false;
+  ensureClassificationConfig(cfg);
+  return (cfg.categories || []).some(c => c.id === cat);
+}
+function hasClassificationContext(ctx){
+  if(!ctx) return false;
+  if(['work','home','phone','computer','errands'].includes(ctx)) return true;
+  if(typeof cfg === 'undefined' || !cfg) return false;
+  ensureClassificationConfig(cfg);
+  return (cfg.contexts || []).some(c => c.id === ctx);
+}
+
+function getCategoryDef(id){
+  if(!id) return null;
+  if(typeof cfg !== 'undefined' && cfg) ensureClassificationConfig(cfg);
+  const row = (typeof cfg !== 'undefined' && cfg && Array.isArray(cfg.categories))
+    ? cfg.categories.find(x => x.id === id) : null;
+  if(row){
+    return { id: row.id, label: row.label || row.id, icon: row.icon || 'pin' };
+  }
+  const ic = CAT_ICON[id];
+  return { id, label: id, icon: ic || 'pin' };
+}
+
+function getContextDef(id){
+  if(!id) return null;
+  if(typeof cfg !== 'undefined' && cfg) ensureClassificationConfig(cfg);
+  const row = (typeof cfg !== 'undefined' && cfg && Array.isArray(cfg.contexts))
+    ? cfg.contexts.find(x => x.id === id) : null;
+  if(row){
+    return { id: row.id, label: row.label || row.id, icon: row.icon || 'pin' };
+  }
+  const fallback = { work: 'briefcase', home: 'home', phone: 'phone', computer: 'monitor', errands: 'car' };
+  return { id, label: id, icon: fallback[id] || 'pin' };
+}
+
+function getActiveCategories(){
+  if(typeof cfg === 'undefined' || !cfg) return DEFAULT_CATEGORY_DEFS.slice();
+  ensureClassificationConfig(cfg);
+  return (cfg.categories || []).filter(c => !c.hidden);
+}
+function getActiveContexts(){
+  if(typeof cfg === 'undefined' || !cfg) return DEFAULT_CONTEXT_DEFS.slice();
+  ensureClassificationConfig(cfg);
+  return (cfg.contexts || []).filter(c => !c.hidden);
+}
+
+function slugClassId(label){
+  const s = String(label).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  return s || ('c' + Date.now().toString(36));
+}
+
+function classificationMove(kind, idx, dir){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const arr = kind === 'cat' ? cfg.categories : cfg.contexts;
+  const j = idx + dir;
+  if(j < 0 || j >= arr.length) return;
+  const tmp = arr[idx];
+  arr[idx] = arr[j];
+  arr[j] = tmp;
+  renderClassificationSettings();
+  refreshClassificationUi();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function classificationToggleHidden(kind, idx){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const arr = kind === 'cat' ? cfg.categories : cfg.contexts;
+  if(!arr[idx]) return;
+  arr[idx].hidden = !arr[idx].hidden;
+  renderClassificationSettings();
+  refreshClassificationUi();
+  if(typeof renderTaskList === 'function') renderTaskList();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function classificationSetLabel(kind, idx, label){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const arr = kind === 'cat' ? cfg.categories : cfg.contexts;
+  if(!arr[idx]) return;
+  arr[idx].label = String(label || '').trim().slice(0, 80) || arr[idx].id;
+  refreshClassificationUi();
+  if(typeof renderTaskList === 'function') renderTaskList();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function classificationSetIcon(kind, idx, iconName){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const arr = kind === 'cat' ? cfg.categories : cfg.contexts;
+  if(!arr[idx]) return;
+  arr[idx].icon = String(iconName || 'pin').trim() || 'pin';
+  renderClassificationSettings();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function classificationAdd(kind){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  const raw = kind === 'cat'
+    ? prompt('New category name:')
+    : prompt('New context name:');
+  if(!raw || !String(raw).trim()) return;
+  ensureClassificationConfig(cfg);
+  const label = String(raw).trim().slice(0, 80);
+  let id = slugClassId(label);
+  const arr = kind === 'cat' ? cfg.categories : cfg.contexts;
+  while(arr.some(x => x.id === id)){
+    id = id + '-' + Math.random().toString(36).slice(2, 5);
+  }
+  arr.push({ id, label, icon: 'pin', hidden: false });
+  renderClassificationSettings();
+  refreshClassificationUi();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function renderClassificationSettings(){
+  const root = document.getElementById('classificationManager');
+  if(!root || typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const iconKeys = (window.UI_ICONS && typeof window.UI_ICONS === 'object')
+    ? Object.keys(window.UI_ICONS).sort() : ['pin'];
+
+  function rowsHtml(title, kind, list){
+    let h = '<div class="class-mgr-block"><div class="class-mgr-hdr">' + esc(title) + '</div>';
+    list.forEach((obj, idx) => {
+      const opt = iconKeys.map(k => '<option value="' + esc(k) + '"' + (k === obj.icon ? ' selected' : '') + '>' + esc(k) + '</option>').join('');
+      h += '<div class="class-mgr-row' + (obj.hidden ? ' class-mgr-row--hidden' : '') + '">'
+        + '<input type="text" class="class-mgr-in" value="' + esc(obj.label) + '" '
+        + 'onchange="classificationSetLabel(\'' + kind + '\',' + idx + ',this.value)" aria-label="Label"/>'
+        + '<select class="class-mgr-sel" onchange="classificationSetIcon(\'' + kind + '\',' + idx + ',this.value)" aria-label="Icon">' + opt + '</select>'
+        + '<button type="button" class="class-mgr-btn" onclick="classificationToggleHidden(\'' + kind + '\',' + idx + ')">' + (obj.hidden ? 'Show' : 'Hide') + '</button>'
+        + '<button type="button" class="class-mgr-btn" onclick="classificationMove(\'' + kind + '\',' + idx + ',-1)">↑</button>'
+        + '<button type="button" class="class-mgr-btn" onclick="classificationMove(\'' + kind + '\',' + idx + ',1)">↓</button>'
+        + '<code class="class-mgr-id" title="Stable id stored on tasks">' + esc(obj.id) + '</code>'
+        + '</div>';
+    });
+    h += '<button type="button" class="btn-ghost btn-sm class-mgr-add" onclick="classificationAdd(\'' + kind + '\')">+ Add ' + (kind === 'cat' ? 'category' : 'context') + '</button></div>';
+    return h;
+  }
+
+  root.innerHTML = rowsHtml('Life categories', 'cat', cfg.categories)
+    + rowsHtml('Contexts', 'ctx', cfg.contexts);
+}
+
+function refreshClassificationUi(){
+  if(typeof cfg !== 'undefined') ensureClassificationConfig(cfg);
+  const sel = document.getElementById('filterCategory');
+  if(sel){
+    const cur = sel.value;
+    sel.innerHTML = '<option value="all">Any category</option>';
+    getActiveCategories().forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id;
+      o.textContent = c.label;
+      sel.appendChild(o);
+    });
+    if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  }
+  if(document.getElementById('classificationManager')){
+    renderClassificationSettings();
+  }
+}
+
 const LIFE_CATS_LOCAL = LIFE_CATS;
 const PRIO_ORDER = { urgent: 0, high: 1, normal: 2, low: 3, none: 4 };
 
@@ -97,10 +314,10 @@ async function predictMetadata(taskName, k){
   const eff = vote('effort');
   const ctx = vote('context');
   const en = vote('energyLevel');
-  if(cat && LIFE_CATS_LOCAL.includes(cat)) merged.category = cat;
+  if(cat && hasClassificationCategory(cat)) merged.category = cat;
   if(pr && ['urgent','high','normal','low'].includes(pr)) merged.priority = pr;
   if(eff && ['xs','s','m','l','xl'].includes(eff)) merged.effort = eff;
-  if(ctx && ['work','home','phone','computer','errands'].includes(ctx)) merged.context = ctx;
+  if(ctx && hasClassificationContext(ctx)) merged.context = ctx;
   if(en && ['high','low'].includes(en)) merged.energyLevel = en;
 
   const tagCounts = new Map();
@@ -415,7 +632,7 @@ async function proposeHarmonizeUpdates(opts){
       }
     }
 
-    if(meta.category && LIFE_CATS_LOCAL.includes(meta.category) && meta.category !== (t.category || null)){
+    if(meta.category && hasClassificationCategory(meta.category) && meta.category !== (t.category || null)){
       args.category = meta.category;
       changes++;
     }
@@ -427,7 +644,7 @@ async function proposeHarmonizeUpdates(opts){
       args.effort = meta.effort;
       changes++;
     }
-    if(meta.context && ['work','home','phone','computer','errands'].includes(meta.context) && meta.context !== (t.context || null)){
+    if(meta.context && hasClassificationContext(meta.context) && meta.context !== (t.context || null)){
       args.context = meta.context;
       changes++;
     }
@@ -493,3 +710,17 @@ window.isTaskBlocked = isTaskBlocked;
 window.autoOrganizeIntoLists = autoOrganizeIntoLists;
 window.invalidateListVectorCache = invalidateListVectorCache;
 window.proposeHarmonizeUpdates = proposeHarmonizeUpdates;
+window.ensureClassificationConfig = ensureClassificationConfig;
+window.getCategoryDef = getCategoryDef;
+window.getContextDef = getContextDef;
+window.getActiveCategories = getActiveCategories;
+window.getActiveContexts = getActiveContexts;
+window.hasClassificationCategory = hasClassificationCategory;
+window.hasClassificationContext = hasClassificationContext;
+window.renderClassificationSettings = renderClassificationSettings;
+window.refreshClassificationUi = refreshClassificationUi;
+window.classificationMove = classificationMove;
+window.classificationToggleHidden = classificationToggleHidden;
+window.classificationSetLabel = classificationSetLabel;
+window.classificationSetIcon = classificationSetIcon;
+window.classificationAdd = classificationAdd;

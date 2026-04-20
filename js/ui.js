@@ -202,8 +202,8 @@ function renderTaskItem(t,depth){
     +(isDone?' completed':'')
     +(t.archived?' archived':'')
     +(dueCls==='overdue'&&!isDone?' overdue':'')
-    +(t.starred?' starred-task':'')
-    +(t.priority&&t.priority!=='none'?' priority-'+t.priority+'-item':'');
+    +(t.starred?' starred-task':'');
+  d.dataset.priority=(!t.starred&&t.priority&&t.priority!=='none')?t.priority:'';
   d.style.marginLeft=(depth*18)+'px';
   d.setAttribute('draggable','true');
   d.dataset.taskId=t.id;
@@ -266,6 +266,7 @@ function renderTaskItem(t,depth){
     :'<span class="task-chevron-spacer"></span>';
   const checkbox='<button class="task-checkbox'+(isDone?' checked':'')+'" onclick="toggleTaskDoneQuick('+t.id+')" title="Mark done" aria-label="Mark task done">'+(isDone?'✓':'')+'</button>';
 
+  const dense=(typeof getCardDensity==='function'?getCardDensity():'compact')==='compact';
   // Signal chips: ONLY show due date if meaningful (today/overdue/soon), and inline hidden otherwise
   let signalChips='';
   // List indicator dot — only show if viewing All and >1 list has tasks (otherwise pure noise)
@@ -287,27 +288,32 @@ function renderTaskItem(t,depth){
   if(prog){
     signalChips+='<span class="task-sig sig-subs" title="'+prog.done+' of '+prog.total+' subtasks done">'+prog.done+'/'+prog.total+'</span>';
   }
-  // Recurring icon (simple)
+  // Recurring + habit streak
   if(t.recur){
     signalChips+='<span class="task-sig sig-recur" title="Repeats '+t.recur+'">↻</span>';
+    if(typeof getHabitStreak==='function'){
+      const st=getHabitStreak(t);
+      if(st>0)signalChips+='<span class="task-sig sig-streak" title="Consecutive days with a logged completion">'+st+'d</span>';
+    }
   }
   // Active timer indicator
   if(isActive){
     signalChips+='<span class="task-sig sig-active" title="Tracking time">● '+fmtHMS(rolledTime)+'</span>';
   }
-  // Category badge (values alignment)
-  if(t.category){
+  // Category, values, dup — detailed density only
+  if(!dense && t.category){
+    const cdef=(typeof getCategoryDef==='function')?getCategoryDef(t.category):null;
+    const catLbl=cdef?cdef.label:t.category;
     const catSvg=(typeof window.categoryIcon==='function')?window.categoryIcon(t.category):'';
-    signalChips+='<span class="task-sig sig-cat" title="'+(t.valuesNote||t.category)+'"><span class="sig-cat-ic">'+catSvg+'</span>'+t.category+'</span>';
+    signalChips+='<span class="task-sig sig-cat" title="'+(t.valuesNote||catLbl)+'"><span class="sig-cat-ic">'+catSvg+'</span>'+esc(catLbl)+'</span>';
   }
-  // Values alignment dots
-  if(t.valuesAlignment&&t.valuesAlignment.length){
+  if(!dense && t.valuesAlignment&&t.valuesAlignment.length){
     signalChips+='<span class="task-sig sig-values" title="Serves: '+t.valuesAlignment.join(', ')+'">◈</span>';
   }
-  if(window._dupSimMap && window._dupSimMap.get(t.id) >= 0.9){
+  if(!dense && window._dupSimMap && window._dupSimMap.get(t.id) >= 0.9){
     signalChips+='<span class="task-sig task-dup-badge" title="Very similar to another task">⧉ dup</span>';
   }
-  if(typeof isParetoTop==='function' && isParetoTop(t.id)){
+  if(smartView==='impact' && typeof isParetoTop==='function' && isParetoTop(t.id)){
     const sc=(typeof getImpactScore==='function'?getImpactScore(t.id):0);
     const zapIc=(typeof window.icon==='function')?window.icon('zap',{size:11}):'';
     signalChips+='<span class="task-sig sig-pareto" title="High-leverage task (top ~20% by impact'+(sc?' · score '+sc.toFixed(1):'')+')"><span class="sig-cat-ic">'+zapIc+'</span>impact</span>';
@@ -385,7 +391,10 @@ function renderBoard(visibleTasks){
       const srcId=parseInt(e.dataTransfer.getData('text/plain'));
       const src=findTask(srcId);if(!src)return;
       src.status=st;
-      if(st==='done'){src.completedAt=timeNow();if(src.recur)spawnRecurringClone(src)}
+      if(st==='done'){
+        if(src.recur && typeof completeHabitCycle==='function'){completeHabitCycle(src)}
+        else{src.completedAt=timeNow()}
+      }
       else src.completedAt=null;
       renderTaskList();saveState('user');
     };
@@ -443,7 +452,19 @@ function openTaskDetail(id){
   STATUS_ORDER.forEach(st=>{
     const b=document.createElement('button');b.className='mfield-chip-btn'+((t.status||'open')===st?' active':'');
     b.textContent=STATUSES[st].label;
-    b.onclick=function(){t.status=st;gid('mdCheckbox').classList.toggle('checked',st==='done');gid('mdCheckbox').textContent=st==='done'?'✓':'';[...sChips.children].forEach(c=>c.classList.remove('active'));b.classList.add('active')};
+    b.onclick=function(){
+      if(st==='done'&&t.recur&&typeof completeHabitCycle==='function'){
+        completeHabitCycle(t);
+        gid('mdCheckbox').classList.remove('checked');gid('mdCheckbox').textContent='';
+        [...sChips.children].forEach((c,i)=>c.classList.toggle('active',STATUS_ORDER[i]==='open'));
+        renderMdHabitLog(t);
+        gid('mdTracked').textContent=fmtHMS(getRolledUpTime(t.id))+' · '+getRolledUpSessions(t.id)+' sessions';
+      }else{
+        t.status=st;
+        gid('mdCheckbox').classList.toggle('checked',st==='done');gid('mdCheckbox').textContent=st==='done'?'✓':'';
+        [...sChips.children].forEach(c=>c.classList.remove('active'));b.classList.add('active');
+      }
+    };
     sChips.appendChild(b)
   });
   // Priority chips
@@ -454,14 +475,6 @@ function openTaskDetail(id){
     b.textContent=PRIORITIES[pr].label;
     b.onclick=function(){t.priority=pr;[...pChips.children].forEach(c=>c.classList.remove('active'));b.classList.add('active')};
     pChips.appendChild(b)
-  });
-  // Type chips
-  const tChips=gid('mdTypeChips');tChips.innerHTML='';
-  [['task','Task'],['bug','Bug'],['idea','Idea'],['errand','Errand'],['waiting','Waiting']].forEach(([key,lbl])=>{
-    const b=document.createElement('button');b.className='mfield-chip-btn'+((t.type||'task')===key?' active':'');
-    b.textContent=lbl;
-    b.onclick=function(){t.type=key;[...tChips.children].forEach(c=>c.classList.remove('active'));b.classList.add('active')};
-    tChips.appendChild(b)
   });
   // Effort chips
   const eChips=gid('mdEffortChips');eChips.innerHTML='';
@@ -479,9 +492,11 @@ function openTaskDetail(id){
     b.onclick=function(){t.energyLevel=t.energyLevel===key?null:key;[...enChips.children].forEach(c=>c.classList.remove('active'));if(t.energyLevel)b.classList.add('active')};
     enChips.appendChild(b)
   });
-  // Context chips
+  // Context chips (from Settings → Classifications)
   const cxChips=gid('mdContextChips');cxChips.innerHTML='';
-  [['work','Work'],['home','Home'],['phone','Phone'],['computer','Computer'],['errands','Errands']].forEach(([key,lbl])=>{
+  const ctxList=(typeof getActiveContexts==='function')?getActiveContexts():[];
+  ctxList.forEach(row=>{
+    const key=row.id,lbl=row.label||row.id;
     const b=document.createElement('button');b.className='mfield-chip-btn'+((t.context||null)===key?' active':'');
     b.textContent=lbl;
     b.onclick=function(){t.context=t.context===key?null:key;[...cxChips.children].forEach(c=>c.classList.remove('active'));if(t.context)b.classList.add('active')};
@@ -499,9 +514,10 @@ function openTaskDetail(id){
   // Tags
   renderTagsEditor(id);
   // Category chips
-  const CATS=[['health','Health'],['finance','Finance'],['work','Work'],['relationships','Relationships'],['learning','Learning'],['home','Home'],['personal','Personal'],['other','Other']];
   const catChips=gid('mdCategoryChips');catChips.innerHTML='';
-  CATS.forEach(([key,lbl])=>{
+  const catList=(typeof getActiveCategories==='function')?getActiveCategories():[];
+  catList.forEach(row=>{
+    const key=row.id,lbl=row.label||row.id;
     const b=document.createElement('button');b.className='mfield-chip-btn'+((t.category||null)===key?' active':'');
     b.textContent=lbl;
     b.onclick=function(){t.category=t.category===key?null:key;[...catChips.children].forEach(c=>c.classList.remove('active'));if(t.category)b.classList.add('active')};
@@ -515,8 +531,22 @@ function openTaskDetail(id){
   // Blocked by
   renderBlockedBy(id);
   refreshMdSimilarTasks(id);
+  renderMdHabitLog(t);
   gid('taskModal').classList.add('open');
   setTimeout(()=>gid('mdName').focus(),50)
+}
+
+function renderMdHabitLog(t){
+  const el=gid('mdHabitLog');
+  if(!el)return;
+  if(!t||!t.recur||!Array.isArray(t.completions)||!t.completions.length){
+    el.innerHTML='<span class="intel-muted">Completion history appears after you finish a repeating task.</span>';
+    return;
+  }
+  const rows=t.completions.slice(-14).reverse();
+  const sum=(typeof getHabitLoggedSecTotal==='function')?getHabitLoggedSecTotal(t):0;
+  el.innerHTML='<div class="habit-log-sum">Logged in completions: <strong>'+fmtHMS(sum)+'</strong></div>'
+    +'<ul class="habit-log-list">'+rows.map(c=>'<li><span>'+esc(c.date)+'</span> · '+fmtHMS(c.sec||0)+'</li>').join('')+'</ul>';
 }
 
 async function refreshMdSimilarTasks(id){
@@ -570,6 +600,10 @@ function closeTaskDetail(){gid('taskModal').classList.remove('open');editingTask
 function saveTaskDetail(){
   if(!editingTaskId)return;
   const t=findTask(editingTaskId);if(!t)return;
+  if(t.recur&&t.status==='done'&&typeof completeHabitCycle==='function'){
+    completeHabitCycle(t);
+    gid('mdCheckbox').classList.remove('checked');gid('mdCheckbox').textContent='';
+  }
   t.name=gid('mdName').value.trim()||t.name;
   t.dueDate=gid('mdDue').value||null;
   t.startDate=gid('mdStartDate').value||null;
@@ -592,7 +626,12 @@ function toggleTaskDone(){
   if(!editingTaskId)return;
   const t=findTask(editingTaskId);if(!t)return;
   if(t.status==='done'){t.status='open';t.completedAt=null;gid('mdCheckbox').classList.remove('checked');gid('mdCheckbox').textContent=''}
-  else{t.status='done';t.completedAt=timeNow();gid('mdCheckbox').classList.add('checked');gid('mdCheckbox').textContent='✓'}
+  else if(t.recur&&typeof completeHabitCycle==='function'){
+    completeHabitCycle(t);
+    gid('mdCheckbox').classList.remove('checked');gid('mdCheckbox').textContent='';
+    renderMdHabitLog(t);
+    gid('mdTracked').textContent=fmtHMS(getRolledUpTime(t.id))+' · '+getRolledUpSessions(t.id)+' sessions';
+  }else{t.status='done';t.completedAt=timeNow();gid('mdCheckbox').classList.add('checked');gid('mdCheckbox').textContent='✓'}
   // Update status chips
   const sChips=gid('mdStatusChips');if(sChips){[...sChips.children].forEach((c,i)=>c.classList.toggle('active',STATUS_ORDER[i]===t.status))}
 }
