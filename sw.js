@@ -1,85 +1,80 @@
-// STUPInD Service Worker — enables offline use + reliable background operation
-// Registered from index.html. Must be served from the same origin as the app.
+// STUPInD Service Worker v14
+const CACHE_NAME = 'stupind-v14';
 
-const CACHE_NAME = 'stupind-v2';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './favicon.ico',
-  './icon-192.png',
-  './icon-512.png',
-  './apple-touch-icon.png',
-  './icon-maskable-512.png',
-  './favicon-32.png'
+  './css/main.css',
+  './js/pwa.js',
+  './js/utils.js',
+  './js/storage.js',
+  './js/audio.js',
+  './js/timer.js',
+  './js/tasks.js',
+  './js/ui.js',
+  './js/sync.js',
+  './js/calfeeds.js',
+  './js/ai.js',
+  './js/app.js',
+  './js/vendor/peerjs.min.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png',
+  './icons/favicon-32.png',
 ];
 
-// Install: cache core assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
+self.addEventListener('install', e => {
+  e.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(ASSETS).catch(() => {}))
-      .then(() => self.skipWaiting())
+      .then(c => c.addAll(ASSETS).catch(()=>{}))
+    // NOTE: NO skipWaiting() here. The new SW goes into 'waiting' state until
+    // the client (app.js) explicitly sends SKIP_WAITING after user clicks
+    // "Reload to update" on the update banner. This keeps old & new versions
+    // cleanly separated instead of swapping code mid-session.
   );
 });
 
-// Activate: clean up old caches, claim clients immediately
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
+self.addEventListener('activate', e => {
+  e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      ))
+      .then(keys => Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-// Fetch: cache-first for app shell, network-first for everything else with fallback
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+self.addEventListener('fetch', e => {
+  if(e.request.method!=='GET') return;
+  const url = new URL(e.request.url);
+  // Pass through external CDN requests (WebLLM, fonts) — let browser cache them
+  if(url.origin!==self.location.origin) return;
 
-  const url = new URL(event.request.url);
-
-  // Only handle same-origin requests; let cross-origin pass through
-  if (url.origin !== self.location.origin) return;
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      // Serve from cache, update in background
-      const fetchPromise = fetch(event.request).then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone).catch(() => {});
-          });
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      const net = fetch(e.request).then(res => {
+        if(res&&res.status===200&&res.type==='basic'){
+          const clone=res.clone();
+          caches.open(CACHE_NAME).then(c=>c.put(e.request,clone).catch(()=>{}));
         }
-        return response;
-      }).catch(() => cached || new Response('Offline — please reconnect.', {
-        status: 503,
-        headers: { 'Content-Type': 'text/plain' }
-      }));
-
-      return cached || fetchPromise;
+        return res;
+      }).catch(()=>cached||new Response('Offline',{status:503,headers:{'Content-Type':'text/plain'}}));
+      return cached||net;
     })
   );
 });
 
-// Message handler: allows page to ask SW to skip waiting, or precache on demand
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+self.addEventListener('message', e => {
+  if(e.data?.type==='SKIP_WAITING') self.skipWaiting();
 });
 
-// Notification click handler: focus or open the app
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ('focus' in client) return client.focus();
-      }
-      if (self.clients.openWindow) return self.clients.openWindow('./');
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({type:'window',includeUncontrolled:true}).then(clients=>{
+      for(const c of clients){ if('focus'in c)return c.focus(); }
+      if(self.clients.openWindow) return self.clients.openWindow('./');
     })
   );
 });
