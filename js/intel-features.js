@@ -260,6 +260,8 @@ function _heuristicMetadata(name){
   return out;
 }
 
+let _schwartzEmbeddingsPromise = null;
+
 /**
  * Ensure Schwartz value description embeddings cached in IDB.
  */
@@ -267,17 +269,26 @@ async function ensureSchwartzEmbeddings(){
   if(typeof embedStore === 'undefined' || !isIntelReady()) return null;
   const existing = await embedStore.getSchwartzEmbeddings();
   if(existing) return existing;
+  if(_schwartzEmbeddingsPromise) return _schwartzEmbeddingsPromise;
 
-  const keys = VALUE_KEYS;
-  const S = SCHWARTZ;
-  const vecs = {};
-  for(const k of keys){
-    const def = (S[k] && S[k].def) ? S[k].def : k;
-    const text = `${k}: ${def}`;
-    vecs[k] = await embedText(text);
+  _schwartzEmbeddingsPromise = (async () => {
+    const keys = VALUE_KEYS;
+    const S = SCHWARTZ;
+    const vecs = {};
+    for(const k of keys){
+      const def = (S[k] && S[k].def) ? S[k].def : k;
+      const text = `${k}: ${def}`;
+      vecs[k] = await embedText(text);
+    }
+    await embedStore.setSchwartzEmbeddings(vecs);
+    return vecs;
+  })();
+
+  try{
+    return await _schwartzEmbeddingsPromise;
+  }finally{
+    _schwartzEmbeddingsPromise = null;
   }
-  await embedStore.setSchwartzEmbeddings(vecs);
-  return vecs;
 }
 
 /** kNN neighborhood + vote quality (tuneable) */
@@ -423,11 +434,14 @@ async function semanticSearch(query, limit){
   return scored.slice(0, lim);
 }
 
+const _DUP_PAIR_YIELD = 350;
+
 async function findDuplicates(threshold){
   const th = threshold == null ? 0.9 : threshold;
   const store = await embedStore.all();
   const ids = [...store.keys()];
   const pairs = [];
+  let pairsChecked = 0;
   for(let i = 0; i < ids.length; i++){
     for(let j = i + 1; j < ids.length; j++){
       const a = ids[i], b = ids[j];
@@ -439,6 +453,7 @@ async function findDuplicates(threshold){
         if(!ta || !tb || ta.archived || tb.archived) continue;
         pairs.push({ idA: a, idB: b, sim, taskA: ta, taskB: tb });
       }
+      if(++pairsChecked % _DUP_PAIR_YIELD === 0) await new Promise(r => setTimeout(r, 0));
     }
   }
   pairs.sort((a, b) => b.sim - a.sim);
@@ -450,6 +465,7 @@ async function computeDuplicateScores(){
   const store = await embedStore.all();
   const ids = [...store.keys()];
   const maxSim = new Map();
+  let pairsChecked = 0;
   for(let i = 0; i < ids.length; i++){
     for(let j = i + 1; j < ids.length; j++){
       const a = ids[i], b = ids[j];
@@ -460,6 +476,7 @@ async function computeDuplicateScores(){
         maxSim.set(a, Math.max(maxSim.get(a) || 0, sim));
         maxSim.set(b, Math.max(maxSim.get(b) || 0, sim));
       }
+      if(++pairsChecked % _DUP_PAIR_YIELD === 0) await new Promise(r => setTimeout(r, 0));
     }
   }
   return maxSim;
