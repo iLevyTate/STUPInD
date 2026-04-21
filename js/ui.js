@@ -160,7 +160,18 @@ function _applyCmdkMode(){
 function _renderAskStatus(state,msg){
   const reply=gid('cmdkAskReply');if(!reply)return;
   if(state==='streaming'){
-    reply.innerHTML='<div class="cmdk-ask-streaming"><span class="cmdk-ask-label">Thinking on-device…</span><button type="button" class="cmdk-ask-stop" onclick="cmdkAskStop()">Stop</button><pre class="cmdk-ask-stream" id="cmdkAskStream"></pre></div>';
+    reply.innerHTML=`
+      <div class="cmdk-ask-streaming">
+        <div class="cmdk-ask-row">
+          <span class="cmdk-ask-spinner" aria-hidden="true"></span>
+          <span class="cmdk-ask-label" id="cmdkAskLabel">Thinking on-device…</span>
+          <button type="button" class="cmdk-ask-stop" onclick="cmdkAskStop()">Stop</button>
+        </div>
+        <details class="cmdk-ask-details">
+          <summary>Show raw output</summary>
+          <pre class="cmdk-ask-stream" id="cmdkAskStream"></pre>
+        </details>
+      </div>`;
   }else if(state==='error'){
     reply.innerHTML='<div class="cmdk-ask-error">'+esc(msg||'Error')+'</div>';
   }else if(state==='empty'){
@@ -170,6 +181,17 @@ function _renderAskStatus(state,msg){
   }else if(state==='need-model'){
     reply.innerHTML='<div class="cmdk-ask-error">Local LLM isn’t ready yet. <button type="button" class="btn-ghost btn-sm" onclick="showTab(\'settings\');closeCmdK()">Open Settings</button> to enable and download it.</div>';
   }
+}
+function _updateAskLabel(totalChars){
+  const lbl=gid('cmdkAskLabel');if(!lbl)return;
+  // Try to extract "count so far" by scanning for completed op entries
+  // without doing a full parse — just count top-level `{"name"` occurrences.
+  const stream=gid('cmdkAskStream');
+  const txt=stream?stream.textContent:'';
+  const matches=txt.match(/\{\s*"name"/g);
+  const n=matches?matches.length:0;
+  if(n>0)lbl.textContent=`Planning ${n} change${n!==1?'s':''}…`;
+  else lbl.textContent='Thinking on-device…';
 }
 async function cmdkAskSubmit(){
   if(_cmdkAskBusy)return;
@@ -185,7 +207,11 @@ async function cmdkAskSubmit(){
   try{
     const res=await askRun(q,{
       signal:_cmdkAskCtl.signal,
-      onToken:(t)=>{if(streamEl){streamEl.textContent+=t;streamEl.scrollTop=streamEl.scrollHeight}},
+      onToken:(t)=>{
+        const el=gid('cmdkAskStream');
+        if(el){el.textContent+=t;el.scrollTop=el.scrollHeight}
+        _updateAskLabel();
+      },
     });
     _cmdkLastReply=res;
     if(!res.ok){
@@ -217,6 +243,20 @@ async function cmdkAskSubmit(){
 function cmdkAskStop(){
   if(_cmdkAskCtl){try{_cmdkAskCtl.abort()}catch(_){}}
   if(typeof genAbort==='function')genAbort();
+}
+
+/** Open the palette pre-switched to Ask mode (used by the promo chip). */
+function openAskMode(){
+  openCmdK();
+  setTimeout(()=>cmdkSetAskMode(true),40);
+}
+
+/** Show the task-input promo chip only when the LLM is ready. */
+function syncAskPromoChip(){
+  const chip=gid('askPromoChip');
+  if(!chip)return;
+  const ready=typeof isGenReady==='function'&&isGenReady();
+  chip.style.display=ready?'':'none';
 }
 function renderCmdK(){
   const rawInput=gid('cmdkInput');
