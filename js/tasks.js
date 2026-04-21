@@ -142,7 +142,7 @@ function scheduleIntelDupRefresh(){
     try{
       window._dupSimMap = await computeDuplicateScores();
       if(typeof renderTaskList === 'function') renderTaskList();
-    }catch(e){}
+    }catch(e){ console.warn('[tasks] duplicate score refresh failed', e); }
   }, 2000);
 }
 window.scheduleIntelDupRefresh = scheduleIntelDupRefresh;
@@ -217,7 +217,21 @@ async function addTask(){
     id:++taskIdCtr,name,totalSec:0,sessions:0,created:timeNowFull(),
     parentId:null,collapsed:false
   },defaultTaskProps(),props));
-  inp.value='';renderTaskList();saveState('user')
+  inp.value='';maybeShowSwipeTip();renderTaskList();saveState('user')
+}
+
+const SWIPE_TIP_KEY = 'odtaulai_swipe_tip_dismissed';
+function maybeShowSwipeTip(){
+  try{
+    if(localStorage.getItem(SWIPE_TIP_KEY)==='1') return;
+    const tip=document.getElementById('swipeTipBanner');
+    if(tip) tip.style.display='';
+  }catch(e){}
+}
+function dismissSwipeTip(){
+  try{ localStorage.setItem(SWIPE_TIP_KEY,'1'); }catch(e){}
+  const tip=document.getElementById('swipeTipBanner');
+  if(tip) tip.style.display='none';
 }
 
 const BULK_LINE_MAX = 200;
@@ -305,6 +319,7 @@ async function confirmBulkImport(){
   }
   const inp = gid('taskInput');
   if(inp) inp.value = '';
+  maybeShowSwipeTip();
   renderTaskList();
   saveState('user');
   if(typeof maybeShowEnhanceBtn === 'function') maybeShowEnhanceBtn();
@@ -564,7 +579,12 @@ function advanceRecurringDate(dateStr,recurType){
     while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()+1);
   }
   else if(recurType==='weekly')d.setDate(d.getDate()+7);
-  else if(recurType==='monthly')d.setMonth(d.getMonth()+1);
+  else if(recurType==='monthly'){
+    const day=d.getDate();
+    d.setMonth(d.getMonth()+1);
+    const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    d.setDate(Math.min(day,last));
+  }
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 
@@ -619,7 +639,7 @@ function cycleStatus(id){
   if(next==='done'&&t.recur){completeHabitCycle(t)}
   else{
     t.status=next;
-    if(t.status==='done')t.completedAt=timeNow();
+    if(t.status==='done')t.completedAt=stampCompletion();
     else t.completedAt=null;
   }
   renderTaskList();saveState('user')
@@ -634,7 +654,7 @@ function toggleTaskDoneQuick(id){
       completeHabitCycle(t);
       if(activeTaskId===id){/* keep timer running on same task */ }
     }else{
-      t.status='done';t.completedAt=timeNow();
+      t.status='done';t.completedAt=stampCompletion();
       if(activeTaskId===id){toggleTask(id)}
     }
     haptic(15);
@@ -734,7 +754,7 @@ function renderLists(){
     chip.onclick=function(){switchList(l.id)};
     chip.title=l.description?l.description+'\n\n(double-click or ✎ to edit)':'Double-click or ✎ to edit list';
     chip.ondblclick=function(e){if(e)e.stopPropagation();editList(l.id)};
-    chip.innerHTML='<span class="lc-dot" style="background:'+l.color+'"></span>'
+    chip.innerHTML='<span class="lc-dot" style="background:'+sanitizeListColor(l.color)+'"></span>'
       +esc(l.name)
       +'<span class="lc-count">'+count+'</span>'
       +'<span class="lc-edit" onclick="event.stopPropagation();editList('+l.id+')" title="Edit name + description">✎</span>'
@@ -747,6 +767,20 @@ function renderLists(){
 }
 
 // Filter/Sort/Search
+function clearTaskSearch(){
+  const el=gid('taskSearch');
+  if(el) el.value='';
+  if(typeof updateTaskFilters==='function') updateTaskFilters();
+}
+
+function updateFiltersSummary(){
+  const el=gid('filtersSummary');if(!el)return;
+  const so=gid('taskSortSel'),gr=gid('groupBySel');
+  const sortPart=so&&so.value?(so.selectedOptions[0]&&so.selectedOptions[0].text)||'':'';
+  const grpPart=gr&&gr.value&&gr.value!=='none'?(gr.selectedOptions[0]&&gr.selectedOptions[0].text)||'':'';
+  el.textContent=grpPart?sortPart+' · '+grpPart:sortPart;
+}
+
 function updateTaskFilters(){
   taskFilters.search=gid('taskSearch').value.toLowerCase().trim();
   taskFilters.status=gid('filterStatus').value;
@@ -757,6 +791,11 @@ function updateTaskFilters(){
   const sem=gid('taskSearchSemantic');
   window._taskSearchSemantic=sem?sem.checked:false;
   updateFiltersActiveBadge();
+  updateFiltersSummary();
+  const clr=gid('taskSearchClear');
+  if(clr) clr.style.display=gid('taskSearch').value.trim()?'':'none';
+  const semPill=gid('taskSearchSemanticPill');
+  if(semPill) semPill.style.display=(gid('taskSearchSemantic')&&gid('taskSearchSemantic').checked)?'':'none';
   if(window._taskSearchSemantic && taskFilters.search && typeof semanticSearch === 'function' && typeof isIntelReady === 'function' && isIntelReady()){
     const rawQ = gid('taskSearch').value.trim();
     void (async () => {
@@ -886,7 +925,11 @@ function renderTodayBanner(){
   const weekAhead=new Date();weekAhead.setDate(weekAhead.getDate()+7);
   const weekEnd=weekAhead.getFullYear()+'-'+String(weekAhead.getMonth()+1).padStart(2,'0')+'-'+String(weekAhead.getDate()).padStart(2,'0');
   const thisWeek=activeTasks.filter(t=>t.dueDate&&t.dueDate>=today&&t.dueDate<=weekEnd).length;
-  const doneToday=tasks.filter(t=>t.status==='done'&&t.completedAt&&t.completedAt>=today).length;
+  const doneToday=tasks.filter(t=>{
+    if(t.status!=='done'||!t.completedAt)return false;
+    const dk=completionDateKey(t.completedAt);
+    return dk===today;
+  }).length;
   if(gid('tbOverdue'))gid('tbOverdue').textContent=overdue;
   if(gid('tbToday'))gid('tbToday').textContent=dueToday;
   if(gid('tbWeek'))gid('tbWeek').textContent=thisWeek;
@@ -895,9 +938,17 @@ function renderTodayBanner(){
   // Week-ahead and done-today are available via smart views, no need to duplicate
   const banner=gid('todayBanner');
   if(banner){
+    let snooze=null;
+    try{ snooze=localStorage.getItem('odtaulai_tb_snooze'); }catch(e){}
     const hasUrgent=overdue>0||dueToday>0;
-    banner.style.display=hasUrgent?'':'none';
+    const hiddenBySnooze=snooze===today;
+    banner.style.display=hasUrgent&&!hiddenBySnooze?'':'none';
   }
+}
+function snoozeTodayBanner(){
+  try{ localStorage.setItem('odtaulai_tb_snooze', todayISO()); }catch(e){}
+  const banner=gid('todayBanner');
+  if(banner) banner.style.display='none';
 }
 
 function toggleFiltersPanel(){
@@ -953,6 +1004,7 @@ function renderTaskList(){
   refreshParetoTopSet();
   renderTodayBanner();
   renderSmartViewCounts();
+  if(typeof updateFiltersSummary==='function') updateFiltersSummary();
   const visibleTasks=tasks.filter(matchesFilters);
   const activeCount=visibleTasks.filter(t=>t.status!=='done'&&!t.parentId).length;
   const badge=gid('taskCountBadge');if(badge)badge.textContent=activeCount+' active';
@@ -973,7 +1025,8 @@ function renderTaskList(){
     } else {
       {
         const ic=(window.icon && window.icon('sparkles',{size:28}))||'';
-        empty.innerHTML='<div class="empty-ic" style="opacity:.6;margin-bottom:8px">'+ic+'</div><div style="font-weight:500;margin-bottom:4px">No tasks yet</div><div style="font-size:12px;opacity:.7;margin-bottom:8px">Type above to add one, or try a quick-add shortcut:</div><div style="font-size:11px;opacity:.55;font-family:var(--font-mono,monospace);line-height:1.6">Buy milk <span style="color:var(--accent,#48b5e0)">tomorrow @urgent #shopping</span></div>';
+        const mod=/(Mac|iPhone|iPod|iPad)/i.test(navigator.platform||'')?'⌘':'Ctrl';
+        empty.innerHTML='<div class="empty-ic" style="opacity:.6;margin-bottom:8px">'+ic+'</div><div style="font-weight:500;margin-bottom:4px">No tasks yet</div><div style="font-size:12px;opacity:.85;margin-bottom:6px">Add your first task above, or press <strong>'+mod+'+K</strong> to open the command palette (jump anywhere).</div><div style="font-size:12px;opacity:.7;margin-bottom:8px"><strong>Filters</strong> (button above) set sort, group, and status — smart-view chips are quick lenses on top.</div><div style="font-size:11px;opacity:.55;font-family:var(--font-mono,monospace);line-height:1.6">Buy milk <span style="color:var(--accent,#48b5e0)">tomorrow @urgent #shopping !star</span></div>';
       }
     }
     return;
@@ -1219,3 +1272,6 @@ window.restoreTaskToolbarPrefs = restoreTaskToolbarPrefs;
 window.completeHabitCycle = completeHabitCycle;
 window.getHabitStreak = getHabitStreak;
 window.getHabitLoggedSecTotal = getHabitLoggedSecTotal;
+window.dismissSwipeTip = dismissSwipeTip;
+window.snoozeTodayBanner = snoozeTodayBanner;
+window.clearTaskSearch = clearTaskSearch;

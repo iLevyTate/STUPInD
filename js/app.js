@@ -1,6 +1,7 @@
-// ── App version — bumped on each release ───────────────────────────────────
-const APP_VERSION = 'v25';
-const APP_BUILD_DATE = '2026-04-20';
+// ── App version — see js/version.js (ODTAULAI_RELEASE) ─────────────────────
+const R = window.ODTAULAI_RELEASE || {};
+const APP_VERSION = R.version || 'v26';
+const APP_BUILD_DATE = R.buildDate || '2026-04-21';
 
 // ── Persistent storage — protects task data from "Clear browsing history" ──
 // Chrome/Edge/Firefox: survives normal clears when granted
@@ -112,9 +113,9 @@ function renderArchive(){
     const d=document.createElement('div');d.className='hist-day';d.onclick=function(){this.classList.toggle('open')};
     d.innerHTML=`<div class="hist-day-hdr"><span class="hist-day-date">${prettyDate(a.date)}</span><div class="hist-day-stats"><div class="hist-day-stat"><span style="color:var(--work)">${a.totalPomos||0}</span> sessions</div><div class="hist-day-stat"><span style="color:var(--long)">${fmtShort(a.totalFocusSec||0)}</span></div>${totalG?`<div class="hist-day-stat"><span style="color:var(--short)">${doneG}/${totalG}</span> goals</div>`:''}</div></div>`
       +`<div class="hist-day-detail">`
-      +(a.goals&&a.goals.length?`<div class="hist-day-section"><div class="hist-day-section-title">Goals</div>${a.goals.map(g=>`<div class="hist-goal">${g.done?'✓':'○'} ${esc(g.text)}${g.doneAt?' <span style="color:#2a3a4a">('+g.doneAt+')</span>':''}</div>`).join('')}</div>`:'')
+      +(a.goals&&a.goals.length?`<div class="hist-day-section"><div class="hist-day-section-title">Goals</div>${a.goals.map(g=>`<div class="hist-goal">${g.done?'✓':'○'} ${esc(g.text)}${g.doneAt?' <span style="color:#2a3a4a">('+esc(String(g.doneAt))+')</span>':''}</div>`).join('')}</div>`:'')
       +(a.tasks&&a.tasks.length?`<div class="hist-day-section"><div class="hist-day-section-title">Tasks</div>${a.tasks.map(t=>`<div class="hist-task">${esc(t.name)}: ${fmtHMS(t.totalSec||0)} (${t.sessions||0} sessions)</div>`).join('')}</div>`:'')
-      +(a.timeLog&&a.timeLog.length?`<div class="hist-day-section"><div class="hist-day-section-title">Session Log</div>${a.timeLog.slice().reverse().slice(0,20).map(l=>`<div class="hist-log">${l.time} — ${esc(l.name)} (${fmtShort(l.durSec)})</div>`).join('')}</div>`:'')
+      +(a.timeLog&&a.timeLog.length?`<div class="hist-day-section"><div class="hist-day-section-title">Session Log</div>${a.timeLog.slice().reverse().slice(0,20).map(l=>`<div class="hist-log">${esc(l.time)} — ${esc(l.name)} (${fmtShort(l.durSec)})</div>`).join('')}</div>`:'')
       +`</div>`;
     list.appendChild(d)
   })
@@ -129,7 +130,11 @@ function exportAllCSV(){
   archives.forEach(a=>{
     const doneG=a.goals?a.goals.filter(g=>g.done).length:0;
     const totalG=a.goals?a.goals.length:0;
-    const taskNames=(a.tasks||[]).map(t=>t.name).join('; ').replace(/"/g,'""');
+    const taskNames=(a.tasks||[]).map(t=>{
+      let n=String(t.name||'').replace(/"/g,'""');
+      if(/^[=+\-@\t\r]/.test(n)) n = "'" + n;
+      return n;
+    }).join('; ');
     csv+=`"${a.date}",${a.totalPomos||0},${Math.floor((a.totalFocusSec||0)/60)},${a.totalBreaks||0},${doneG},${totalG},"${taskNames}"\n`;
   });
   const blob=new Blob([csv],{type:'text/csv'});
@@ -235,6 +240,7 @@ ensureQuickTick();
 // Restore task toolbar UI
 if(gid('taskSortSel'))gid('taskSortSel').value=taskSortBy;
 if(gid('groupBySel'))gid('groupBySel').value=taskGroupBy;
+if(typeof updateFiltersSummary==='function') updateFiltersSummary();
 applyTheme();
 setTaskView(taskView);
 setSmartView(smartView);
@@ -260,28 +266,20 @@ if(activeTab==='settings'&&!settingsOpen)toggleSettings();
   },500)
 })();
 
-// Day rollover check every minute. At midnight:
-// 1. Flush live in-memory state to localStorage first (capture today's edits)
-// 2. Archive the snapshot that has the OLD date stamp
-// 3. Reload so the fresh state starts with today's date
+// Day rollover: archive the last persisted blob (yesterday's date + counters),
+// zero in-memory daily metrics, flush live tasks via saveState, reload.
 setInterval(()=>{
   try{
     const raw=localStorage.getItem(STORE_KEY);
     if(!raw) return;
     const s=JSON.parse(raw);
     if(!s.date||s.date===todayKey()) return;
-    // Date differs — rollover is happening. Archive the snapshot that has the
-    // OLD date, but first flush any in-memory changes (they'll go under the
-    // old date, which is correct since they happened "yesterday" in user's clock).
+    try{ archiveDay(s); }catch(e){ console.warn('[app] archiveDay at rollover', e); }
+    totalPomos=0;totalBreaks=0;totalFocusSec=0;pomosInCycle=0;
+    sessionHistory=[];timeLog=[];
     if(typeof saveState==='function') saveState('auto');
-    // Re-read after save
-    const updated=localStorage.getItem(STORE_KEY);
-    if(updated){
-      try{archiveDay(JSON.parse(updated));}catch(e){}
-    }
-    localStorage.removeItem(STORE_KEY);
     location.reload();
-  }catch(e){}
+  }catch(e){ console.warn('[app] day rollover', e); }
 },60000);
 
 // Init sync panel UI (renders the "Enable Sync" state by default)
@@ -306,8 +304,12 @@ async function renderSystemInfo(info){
   const onlineLine = navigator.onLine
     ? `<span class="sys-info-ok">${okIc} Online</span>`
     : `<span class="sys-info-warn">${warnIc} Offline — tasks work, sync paused</span>`;
+  const lastSaved = window._lastSaveAt
+    ? new Date(window._lastSaveAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+    : '—';
   el.innerHTML = `
     <div><strong>Version:</strong> ${APP_VERSION} (built ${APP_BUILD_DATE})</div>
+    <div><strong>Last saved:</strong> ${lastSaved}</div>
     <div><strong>Network:</strong> ${onlineLine}</div>
     <div><strong>Storage:</strong> ${storageLine}</div>
     <div><strong>Intelligence:</strong> ${typeof isIntelReady === 'function' && isIntelReady()
@@ -360,3 +362,13 @@ setTimeout(() => {
     else if(typeof syncSemanticSearchUi === 'function') syncSemanticSearchUi();
   });
 }, 1000);
+
+(function syncCmdKGlyph(){
+  const b=document.getElementById('cmdKBtn');
+  if(!b) return;
+  if(!/(Mac|iPhone|iPod|iPad)/i.test(navigator.platform||'')){
+    b.textContent='Ctrl+K';
+    b.style.fontSize='10px';
+    b.style.lineHeight='1.1';
+  }
+})();

@@ -1,7 +1,15 @@
 // ========== CALENDAR VIEW ==========
+function _calMonthAnchor(){
+  if(!calMonth) return new Date();
+  if(/^\d{4}-\d{2}$/.test(calMonth)){
+    const p=calMonth.split('-').map(Number);
+    return new Date(p[0],p[1]-1,1,12,0,0);
+  }
+  return new Date(calMonth);
+}
 function renderCalendar(visibleTasks){
   const container=gid('calendarView');if(!container)return;
-  const now=calMonth?new Date(calMonth):new Date();
+  const now=_calMonthAnchor();
   const year=now.getFullYear(),month=now.getMonth();
   const first=new Date(year,month,1);
   const startDay=first.getDay();
@@ -80,7 +88,7 @@ function renderCalTasks(arr, isoDate){
   if(feedEvents.length){
     const showEvs = feedEvents.slice(0, 2);
     html += showEvs.map(ev =>
-      `<div class="cal-task cal-feed-event" style="border-left-color:${ev.feedColor}" title="${esc(ev.feedLabel)}: ${esc(ev.title)}${ev.time?' at '+ev.time:''}${ev.location?' — '+esc(ev.location):''}">`
+      `<div class="cal-task cal-feed-event" style="border-left-color:${sanitizeListColor(ev.feedColor)}" title="${esc(ev.feedLabel)}: ${esc(ev.title)}${ev.time?' at '+ev.time:''}${ev.location?' — '+esc(ev.location):''}">`
       + (ev.time ? `<span class="cal-feed-time">${esc(ev.time)}</span> ` : '')
       + esc(ev.title)
       + '</div>'
@@ -95,9 +103,10 @@ function renderCalTasks(arr, isoDate){
   return html;
 }
 function calNav(dir){
-  const now=calMonth?new Date(calMonth):new Date();
+  const now=_calMonthAnchor();
   now.setMonth(now.getMonth()+dir);
-  calMonth=now.toISOString();renderTaskList()
+  calMonth=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  renderTaskList();
 }
 function calToday(){calMonth=null;renderTaskList()}
 
@@ -149,6 +158,11 @@ function renderCmdK(){
   }
   cmdkFilteredItems=items.filter(i=>!i.section);
   if(cmdkActiveIdx>=cmdkFilteredItems.length)cmdkActiveIdx=Math.max(0,cmdkFilteredItems.length-1);
+  const foot=gid('cmdkFoot');
+  if(foot){
+    const mod=/(Mac|iPhone|iPod|iPad)/i.test(navigator.platform||'')?'⌘':'Ctrl';
+    foot.textContent=mod+'/Ctrl+K · ↑↓ · Enter · Esc';
+  }
   if(!items.length){results.innerHTML='<div class="cmdk-empty">No matches</div>';return}
   let itemIdx=0;
   results.innerHTML=items.map(i=>{
@@ -273,7 +287,7 @@ function renderTaskItem(t,depth){
   const taskOwnerList=lists.find(l=>l.id===t.listId);
   const listsWithTasks=new Set(tasks.filter(x=>!x.archived&&x.status!=='done').map(x=>x.listId));
   if(taskOwnerList&&activeListId==='all'&&listsWithTasks.size>1){
-    signalChips+='<span class="task-sig sig-list" style="background:transparent;padding:0" title="List: '+esc(taskOwnerList.name)+'"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+taskOwnerList.color+'"></span></span>';
+    signalChips+='<span class="task-sig sig-list" style="background:transparent;padding:0" title="List: '+escAttr(taskOwnerList.name)+'"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+sanitizeListColor(taskOwnerList.color)+'"></span></span>';
   }
   if(t.dueDate&&!isDone){
     const dueLabel=fmtDue(t.dueDate);
@@ -305,10 +319,10 @@ function renderTaskItem(t,depth){
     const cdef=(typeof getCategoryDef==='function')?getCategoryDef(t.category):null;
     const catLbl=cdef?cdef.label:t.category;
     const catSvg=(typeof window.categoryIcon==='function')?window.categoryIcon(t.category):'';
-    signalChips+='<span class="task-sig sig-cat" title="'+(t.valuesNote||catLbl)+'"><span class="sig-cat-ic">'+catSvg+'</span>'+esc(catLbl)+'</span>';
+    signalChips+='<span class="task-sig sig-cat" title="'+escAttr(t.valuesNote||catLbl)+'"><span class="sig-cat-ic">'+catSvg+'</span>'+esc(catLbl)+'</span>';
   }
   if(!dense && t.valuesAlignment&&t.valuesAlignment.length){
-    signalChips+='<span class="task-sig sig-values" title="Serves: '+t.valuesAlignment.join(', ')+'">◈</span>';
+    signalChips+='<span class="task-sig sig-values" title="Serves: '+escAttr(t.valuesAlignment.join(', '))+'">◈</span>';
   }
   if(!dense && window._dupSimMap && window._dupSimMap.get(t.id) >= 0.9){
     signalChips+='<span class="task-sig task-dup-badge" title="Very similar to another task">⧉ dup</span>';
@@ -339,8 +353,11 @@ function renderTaskItem(t,depth){
   // Star pin — shown prominently only if starred (otherwise hidden in hover actions)
   const starPin=t.starred?'<span class="star-pin" title="Pinned">★</span>':'';
 
+  const dragGrip=(typeof taskSortBy==='string'&&taskSortBy==='manual')
+    ?'<span class="drag-handle" title="Drag to reorder">⠿</span>':'';
   d.innerHTML=
     '<div class="task-row-primary">'
+      +dragGrip
       +chevron
       +checkbox
       +'<div class="task-main">'
@@ -393,7 +410,7 @@ function renderBoard(visibleTasks){
       src.status=st;
       if(st==='done'){
         if(src.recur && typeof completeHabitCycle==='function'){completeHabitCycle(src)}
-        else{src.completedAt=timeNow()}
+        else{src.completedAt=stampCompletion()}
       }
       else src.completedAt=null;
       renderTaskList();saveState('user');
@@ -443,7 +460,7 @@ function openTaskDetail(id){
   gid('mdTracked').textContent=fmtHMS(getRolledUpTime(id))+' · '+getRolledUpSessions(id)+' sessions';
   const path=getTaskPath(id);
   const pathStr=path.length>1?path.slice(0,-1).join(' › ')+' › ':'';
-  gid('mdStats').innerHTML='<span><b>Path:</b> '+esc(pathStr)+'<b style="color:#e2e8f0">'+esc(t.name)+'</b></span> · <span>Created '+(t.created||'—')+'</span>'+(t.completedAt?' · <span>Done '+t.completedAt+'</span>':'');
+  gid('mdStats').innerHTML='<span><b>Path:</b> '+esc(pathStr)+'<b style="color:#e2e8f0">'+esc(t.name)+'</b></span> · <span>Created '+esc(t.created||'—')+'</span>'+(t.completedAt?' · <span>Done '+esc(String(t.completedAt))+'</span>':'');
   // List selector
   const listSel=gid('mdList');listSel.innerHTML='';
   lists.forEach(l=>{const opt=document.createElement('option');opt.value=l.id;opt.textContent=l.name;if((t.listId||lists[0].id)===l.id)opt.selected=true;listSel.appendChild(opt)});
@@ -533,6 +550,8 @@ function openTaskDetail(id){
   refreshMdSimilarTasks(id);
   renderMdHabitLog(t);
   gid('taskModal').classList.add('open');
+  _taskModalPrevFocus=document.activeElement;
+  document.addEventListener('keydown',_taskModalTabTrap,true);
   setTimeout(()=>gid('mdName').focus(),50)
 }
 
@@ -596,7 +615,25 @@ function renderTagsEditor(id){
 function addTag(id,tag){const t=findTask(id);if(!t)return;if(!t.tags)t.tags=[];if(!t.tags.includes(tag))t.tags.push(tag);renderTagsEditor(id)}
 function removeTag(id,idx){const t=findTask(id);if(!t||!t.tags)return;t.tags.splice(idx,1);renderTagsEditor(id)}
 
-function closeTaskDetail(){gid('taskModal').classList.remove('open');editingTaskId=null}
+let _taskModalPrevFocus=null;
+function _taskModalTabTrap(e){
+  const modal=gid('taskModal');
+  if(!modal||!modal.classList.contains('open')||e.key!=='Tab')return;
+  const panel=modal.querySelector('.modal');
+  if(!panel)return;
+  const f=[...panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el=>!el.disabled&&el.offsetParent!==null);
+  if(f.length<2)return;
+  const first=f[0],last=f[f.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+}
+function closeTaskDetail(){
+  gid('taskModal').classList.remove('open');
+  editingTaskId=null;
+  document.removeEventListener('keydown',_taskModalTabTrap,true);
+  if(_taskModalPrevFocus&&_taskModalPrevFocus.focus)try{_taskModalPrevFocus.focus()}catch(e){}
+  _taskModalPrevFocus=null;
+}
 function saveTaskDetail(){
   if(!editingTaskId)return;
   const t=findTask(editingTaskId);if(!t)return;
@@ -614,7 +651,7 @@ function saveTaskDetail(){
   const ra=gid('mdRemindAt')?gid('mdRemindAt').value:'';
   if(ra!==t.remindAt){t.remindAt=ra||null;t.reminderFired=false}
   t.listId=parseInt(gid('mdList').value)||t.listId;
-  if(t.status==='done'&&!t.completedAt)t.completedAt=timeNow();
+  if(t.status==='done'&&!t.completedAt)t.completedAt=stampCompletion();
   if(t.status!=='done')t.completedAt=null;
   closeTaskDetail();renderTaskList();saveState('user')
 }
@@ -631,7 +668,7 @@ function toggleTaskDone(){
     gid('mdCheckbox').classList.remove('checked');gid('mdCheckbox').textContent='';
     renderMdHabitLog(t);
     gid('mdTracked').textContent=fmtHMS(getRolledUpTime(t.id))+' · '+getRolledUpSessions(t.id)+' sessions';
-  }else{t.status='done';t.completedAt=timeNow();gid('mdCheckbox').classList.add('checked');gid('mdCheckbox').textContent='✓'}
+  }else{t.status='done';t.completedAt=stampCompletion();gid('mdCheckbox').classList.add('checked');gid('mdCheckbox').textContent='✓'}
   // Update status chips
   const sChips=gid('mdStatusChips');if(sChips){[...sChips.children].forEach((c,i)=>c.classList.toggle('active',STATUS_ORDER[i]===t.status))}
 }
@@ -658,11 +695,12 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&gid('taskModal').cl
 // ========== LOG ==========
 function addLog(name,durSec,type){timeLog.unshift({id:++logIdCtr,name,durSec,type,time:timeNow()});renderLog();saveState('user')}
 function removeLog(id){timeLog=timeLog.filter(l=>l.id!==id);renderLog();saveState('user')}
-function renderLog(){const list=gid('logList');list.querySelectorAll('.log-item').forEach(e=>e.remove());if(!timeLog.length){gid('logEmpty').style.display='';return}gid('logEmpty').style.display='none';timeLog.slice(0,40).forEach(l=>{const d=document.createElement('div');d.className='log-item';const col=l.type==='work'?'var(--work)':l.type==='short'?'var(--short)':l.type==='quick'?'#48b5e0':'var(--long)';const lid=l.id||0;d.innerHTML=`<div class="log-dot" style="background:${col}"></div><span class="log-name">${esc(l.name)}</span><span class="log-dur">${fmtShort(l.durSec)}</span><span class="log-time">${l.time}</span>${lid?`<button class="log-del" onclick="removeLog(${lid})" title="Remove">×</button>`:''}`;list.appendChild(d)})}
+function renderLog(){const list=gid('logList');list.querySelectorAll('.log-item').forEach(e=>e.remove());if(!timeLog.length){gid('logEmpty').style.display='';return}gid('logEmpty').style.display='none';timeLog.slice(0,40).forEach(l=>{const d=document.createElement('div');d.className='log-item';const col=l.type==='work'?'var(--work)':l.type==='short'?'var(--short)':l.type==='quick'?'#48b5e0':'var(--long)';const lid=l.id||0;d.innerHTML=`<div class="log-dot" style="background:${col}"></div><span class="log-name">${esc(l.name)}</span><span class="log-dur">${fmtShort(l.durSec)}</span><span class="log-time">${esc(l.time)}</span>${lid?`<button class="log-del" onclick="removeLog(${lid})" title="Remove">×</button>`:''}`;list.appendChild(d)})}
 function clearLog(){timeLog=[];renderLog();saveState('user')}
 
 // ========== TAB NAVIGATION ==========
 function showTab(tab){
+  if(typeof closeCmdK==='function')closeCmdK();
   activeTab=tab;
   document.querySelectorAll('[data-tab]').forEach(el=>{el.style.display=el.dataset.tab===tab?'':'none'});
   document.querySelectorAll('.nav-tab').forEach(el=>{el.classList.toggle('active',el.dataset.navtab===tab)});

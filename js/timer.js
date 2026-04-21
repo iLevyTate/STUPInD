@@ -75,7 +75,7 @@ function renderCtrls(){
 // ========== TIMER ==========
 function startTimer(){if(totalDuration<=0)return;running=true;finished=false;startedAt=Date.now();pausedRemaining=remaining;fireCounts={};if(cfg.linkTask&&phase==='work'&&activeTaskId)taskStartedAt=Date.now();clearInterval(tickId);tickId=setInterval(tick,200);reqNotifPerm();schedulePhaseAudio();startKeepalive();renderCtrls()}
 function pauseTimer(){running=false;const el=Math.floor((Date.now()-startedAt)/1000);pausedRemaining=Math.max(0,pausedRemaining-el);remaining=pausedRemaining;if(activeTaskId&&taskStartedAt){const t=findTask(activeTaskId);if(t){t.totalSec+=Math.floor((Date.now()-taskStartedAt)/1000);taskStartedAt=null}}cancelScheduledAudio();maybeStopKeepalive();renderCtrls();renderTaskList();saveState('user')}
-function resumeTimer(){running=true;startedAt=Date.now();if(cfg.linkTask&&phase==='work'&&activeTaskId)taskStartedAt=Date.now();clearInterval(tickId);tickId=setInterval(tick,200);schedulePhaseAudio();renderCtrls()}
+function resumeTimer(){running=true;startedAt=Date.now();if(cfg.linkTask&&phase==='work'&&activeTaskId)taskStartedAt=Date.now();clearInterval(tickId);tickId=setInterval(tick,200);schedulePhaseAudio();startKeepalive();renderCtrls()}
 function tick(){
   if(!running)return;
   const el=Math.floor((Date.now()-startedAt)/1000);remaining=Math.max(0,pausedRemaining-el);
