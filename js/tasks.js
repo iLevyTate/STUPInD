@@ -1000,6 +1000,9 @@ function renderSmartViewCounts(){
 function renderTaskList(){
   const list=gid('taskList');
   if(!list)return;
+  // H2: compute the "lists that own open tasks" set once per render so
+  // renderTaskItem doesn't rebuild it for every row (was O(N²)).
+  if(typeof _computeListsWithTasks==='function') _computeListsWithTasks();
   renderLists();
   refreshParetoTopSet();
   renderTodayBanner();
@@ -1191,7 +1194,7 @@ function renderTaskNotes(taskId){
   const list=document.getElementById('noteList');
   (t.notes||[]).forEach(n=>{
     const d=document.createElement('div');d.className='note-item';
-    d.innerHTML=`<span class="note-time">${n.createdAt}</span><span class="note-text">${esc(n.text)}</span><button class="note-rm" onclick="removeTaskNote(${taskId},${n.id})">×</button>`;
+    d.innerHTML=`<span class="note-time">${esc(n.createdAt||'')}</span><span class="note-text">${esc(n.text)}</span><button class="note-rm" onclick="removeTaskNote(${taskId},${n.id})">×</button>`;
     list.appendChild(d);
   });
 }
