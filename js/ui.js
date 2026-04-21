@@ -126,10 +126,19 @@ function openCmdK(){
   setTimeout(()=>gid('cmdkInput').focus(),30);
 }
 function closeCmdK(){
-  if(_cmdkAskCtl){try{_cmdkAskCtl.abort()}catch(_){}_cmdkAskCtl=null}
+  _cmdkAbortAsk();
   gid('cmdkOverlay').classList.remove('open');
 }
+function _cmdkAbortAsk(){
+  if(_cmdkAskCtl){try{_cmdkAskCtl.abort()}catch(_){}_cmdkAskCtl=null}
+  if(typeof genAbort==='function'){try{genAbort()}catch(_){}}
+  _cmdkAskBusy=false;
+}
 function cmdkSetAskMode(on){
+  // Leaving ask mode mid-generation must actually stop the model, not just
+  // the UI affordance. Otherwise tokens keep decoding in the background and
+  // the next Ask turn sees stale state.
+  if(!on && (_cmdkAskBusy || _cmdkAskCtl)) _cmdkAbortAsk();
   cmdkMode=on?'ask':'find';
   _applyCmdkMode();
   renderCmdK();
@@ -266,6 +275,10 @@ function renderCmdK(){
     const rest=rawVal.replace(/^[?？]\s*/,'');
     if(rawInput)rawInput.value=rest;
     rawVal=rest;
+    // If there's an Ask turn running from a previous invocation, kill it
+    // cleanly before flipping modes so the new Ask state isn't racing the
+    // old one.
+    if(_cmdkAskBusy||_cmdkAskCtl)_cmdkAbortAsk();
     cmdkSetAskMode(true);
     return;
   }

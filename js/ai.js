@@ -1493,6 +1493,10 @@ function renderGenSettings(){
         Weights live in the browser HTTP cache. "Clear LLM cache" removes any caches we control; to force a full purge use the browser's own "Clear site data".
       </p>
     </div>`;
+
+  // Keep the task-input promo chip in sync with gen state on every render
+  // (toggle, model switch, download, error, clear — all route through here).
+  if(typeof syncAskPromoChip === 'function') syncAskPromoChip();
 }
 
 function toggleGenEnabled(){

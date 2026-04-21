@@ -166,6 +166,11 @@ async function askRun(query, opts){
   if(typeof isGenReady !== 'function' || !isGenReady()){
     return { ok:false, ops:[], rejected:[], destructiveLevel:'none', rawText:'', truncated:false, reason:'GEN_NOT_READY' };
   }
+  // Defensive: if tool-schema.js somehow failed to load, bail cleanly instead
+  // of letting a ReferenceError escape to the browser console.
+  if(typeof parseOpsJson !== 'function' || typeof validateOps !== 'function'){
+    return { ok:false, ops:[], rejected:[], destructiveLevel:'none', rawText:'', truncated:false, reason:'SCHEMA_UNAVAILABLE' };
+  }
 
   const contextLines = await _askBuildContext(q);
   const system = _askSystemPrompt();

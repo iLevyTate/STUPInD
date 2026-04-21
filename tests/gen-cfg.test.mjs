@@ -120,3 +120,19 @@ test('pushAskHistory dedupes and caps at 5', () => {
   const q9count = hist.filter(h => h.text === 'q9').length;
   assert.equal(q9count, 1);
 });
+
+test('gen presets: primary HuggingFaceTB ids have an onnx-community alt slug mapped', () => {
+  // The fallback table in gen.js must cover both SmolLM2 HF-TB primaries.
+  const src = readFileSync(join(root, 'js', 'gen.js'), 'utf8');
+  assert.match(src, /HuggingFaceTB\/SmolLM2-360M-Instruct[\s\S]*onnx-community\/SmolLM2-360M-Instruct/);
+  assert.match(src, /HuggingFaceTB\/SmolLM2-135M-Instruct[\s\S]*onnx-community\/SmolLM2-135M-Instruct-ONNX/);
+});
+
+test('gen presets: alt-slug fallback is gated behind 401/403/404 heuristic', () => {
+  // Sanity — the retry path must NOT fire on generic errors; only missing-file
+  // responses. Otherwise a transient network blip would silently flip users
+  // to the alternate mirror and keep them there forever.
+  const src = readFileSync(join(root, 'js', 'gen.js'), 'utf8');
+  assert.match(src, /_isMissingFileError/, 'must define _isMissingFileError guard');
+  assert.match(src, /alt && _isMissingFileError\(e\)/, 'fallback must be gated on missing-file');
+});

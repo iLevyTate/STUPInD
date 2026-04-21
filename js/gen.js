@@ -235,6 +235,13 @@ async function genLoad(modelId, dtype, onProgress){
           cb({ status: 'retry', file: alt, progress: 0 });
           _genModelId = alt;
           await tryPipeline(alt);
+          // Persist the working slug so next session doesn't re-try the
+          // dead primary. User can still switch back via the dropdown.
+          try{
+            const cfg = _loadGenCfg();
+            cfg.modelId = alt;
+            _saveGenCfg(cfg);
+          }catch(_){}
         } else {
           throw e;
         }
