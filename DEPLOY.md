@@ -160,3 +160,27 @@ Root `favicon.ico` is separate; update if you replace the browser tab icon.
 Then update `manifest.json` colors to match your brand:
 - `background_color` — splash screen background
 - `theme_color` — address bar / status bar tint
+
+---
+
+## Content-Security-Policy (CSP)
+
+ODTAULAI ships without a CSP by default — most static hosts (Netlify, GitHub Pages, Vercel, Cloudflare Pages) serve without one and the app works fine.
+
+If your host enforces a strict CSP via HTTP headers, the embedding and optional Ask features need these allow-list entries. Everything else is same-origin.
+
+```
+default-src 'self';
+script-src  'self' https://cdn.jsdelivr.net;
+style-src   'self' 'unsafe-inline';
+img-src     'self' data: blob:;
+worker-src  'self' blob: https://cdn.jsdelivr.net;
+connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://cdn-lfs.huggingface.co https://*.huggingface.co;
+```
+
+Why each entry:
+- `cdn.jsdelivr.net` — Transformers.js ESM module + its WASM/worker assets.
+- `huggingface.co` + `cdn-lfs.huggingface.co` — embedding model weights (`Xenova/gte-small`) and, if the user enables Ask, the generative model weights (e.g. `HuggingFaceTB/SmolLM2-360M-Instruct`).
+- `worker-src blob:` — Transformers.js spawns a Web Worker from a blob URL for background inference.
+
+If you enable P2P sync (PeerJS), also add your signalling server (default `wss://*.peerjs.com`) to `connect-src`.

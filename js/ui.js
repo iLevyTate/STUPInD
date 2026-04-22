@@ -126,10 +126,19 @@ function openCmdK(){
   setTimeout(()=>gid('cmdkInput').focus(),30);
 }
 function closeCmdK(){
-  if(_cmdkAskCtl){try{_cmdkAskCtl.abort()}catch(_){}_cmdkAskCtl=null}
+  _cmdkAbortAsk();
   gid('cmdkOverlay').classList.remove('open');
 }
+function _cmdkAbortAsk(){
+  if(_cmdkAskCtl){try{_cmdkAskCtl.abort()}catch(_){}_cmdkAskCtl=null}
+  if(typeof genAbort==='function'){try{genAbort()}catch(_){}}
+  _cmdkAskBusy=false;
+}
 function cmdkSetAskMode(on){
+  // Leaving ask mode mid-generation must actually stop the model, not just
+  // the UI affordance. Otherwise tokens keep decoding in the background and
+  // the next Ask turn sees stale state.
+  if(!on && (_cmdkAskBusy || _cmdkAskCtl)) _cmdkAbortAsk();
   cmdkMode=on?'ask':'find';
   _applyCmdkMode();
   renderCmdK();
@@ -160,7 +169,18 @@ function _applyCmdkMode(){
 function _renderAskStatus(state,msg){
   const reply=gid('cmdkAskReply');if(!reply)return;
   if(state==='streaming'){
-    reply.innerHTML='<div class="cmdk-ask-streaming"><span class="cmdk-ask-label">Thinking on-device…</span><button type="button" class="cmdk-ask-stop" onclick="cmdkAskStop()">Stop</button><pre class="cmdk-ask-stream" id="cmdkAskStream"></pre></div>';
+    reply.innerHTML=`
+      <div class="cmdk-ask-streaming">
+        <div class="cmdk-ask-row">
+          <span class="cmdk-ask-spinner" aria-hidden="true"></span>
+          <span class="cmdk-ask-label" id="cmdkAskLabel">Thinking on-device…</span>
+          <button type="button" class="cmdk-ask-stop" onclick="cmdkAskStop()">Stop</button>
+        </div>
+        <details class="cmdk-ask-details">
+          <summary>Show raw output</summary>
+          <pre class="cmdk-ask-stream" id="cmdkAskStream"></pre>
+        </details>
+      </div>`;
   }else if(state==='error'){
     reply.innerHTML='<div class="cmdk-ask-error">'+esc(msg||'Error')+'</div>';
   }else if(state==='empty'){
@@ -185,6 +205,17 @@ function _renderAskStatus(state,msg){
     reply.innerHTML = '<div class="cmdk-ask-error">' + inner + '</div>';
   }
 }
+function _updateAskLabel(totalChars){
+  const lbl=gid('cmdkAskLabel');if(!lbl)return;
+  // Try to extract "count so far" by scanning for completed op entries
+  // without doing a full parse — just count top-level `{"name"` occurrences.
+  const stream=gid('cmdkAskStream');
+  const txt=stream?stream.textContent:'';
+  const matches=txt.match(/\{\s*"name"/g);
+  const n=matches?matches.length:0;
+  if(n>0)lbl.textContent=`Planning ${n} change${n!==1?'s':''}…`;
+  else lbl.textContent='Thinking on-device…';
+}
 async function cmdkAskSubmit(){
   if(_cmdkAskBusy)return;
   const input=gid('cmdkInput');if(!input)return;
@@ -199,7 +230,11 @@ async function cmdkAskSubmit(){
   try{
     const res=await askRun(q,{
       signal:_cmdkAskCtl.signal,
-      onToken:(t)=>{if(streamEl){streamEl.textContent+=t;streamEl.scrollTop=streamEl.scrollHeight}},
+      onToken:(t)=>{
+        const el=gid('cmdkAskStream');
+        if(el){el.textContent+=t;el.scrollTop=el.scrollHeight}
+        _updateAskLabel();
+      },
     });
     _cmdkLastReply=res;
     if(!res.ok){
@@ -232,6 +267,20 @@ function cmdkAskStop(){
   if(_cmdkAskCtl){try{_cmdkAskCtl.abort()}catch(_){}}
   if(typeof genAbort==='function')genAbort();
 }
+
+/** Open the palette pre-switched to Ask mode (used by the promo chip). */
+function openAskMode(){
+  openCmdK();
+  setTimeout(()=>cmdkSetAskMode(true),40);
+}
+
+/** Show the task-input promo chip only when the LLM is ready. */
+function syncAskPromoChip(){
+  const chip=gid('askPromoChip');
+  if(!chip)return;
+  const ready=typeof isGenReady==='function'&&isGenReady();
+  chip.style.display=ready?'':'none';
+}
 function renderCmdK(){
   const rawInput=gid('cmdkInput');
   let rawVal=rawInput?rawInput.value:'';
@@ -240,6 +289,10 @@ function renderCmdK(){
     const rest=rawVal.replace(/^[?？]\s*/,'');
     if(rawInput)rawInput.value=rest;
     rawVal=rest;
+    // If there's an Ask turn running from a previous invocation, kill it
+    // cleanly before flipping modes so the new Ask state isn't racing the
+    // old one.
+    if(_cmdkAskBusy||_cmdkAskCtl)_cmdkAbortAsk();
     cmdkSetAskMode(true);
     return;
   }

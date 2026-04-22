@@ -20,8 +20,58 @@ function _loadCfg(){
 }
 function _saveCfg(){ try{ localStorage.setItem(INTEL_CFG_KEY, JSON.stringify(_cfg)); }catch(e){} }
 
+// Track the two model states independently so the header chip can show
+// both without one stomping the other (embedding = ambient/always-on,
+// generative = opt-in LLM for Ask mode).
+let _embedChipState = 'idle';
+let _embedChipMsg = '';
+let _genChipState = 'idle';
+let _genChipMsg = '';
+
+function _composeChipState(){
+  // Error wins. Then loading. Then ready. Otherwise idle.
+  if(_embedChipState === 'error' || _genChipState === 'error'){
+    const which = _genChipState === 'error' ? 'LLM' : 'Embedding';
+    const raw = _genChipState === 'error' ? _genChipMsg : _embedChipMsg;
+    return { state: 'error', msg: `${which}: ${raw || 'load failed'}` };
+  }
+  if(_embedChipState === 'loading' || _embedChipState === 'working' || _embedChipState === 'syncing' ||
+     _genChipState === 'loading' || _genChipState === 'working' || _genChipState === 'syncing'){
+    if(_genChipState === 'loading' || _genChipState === 'working' || _genChipState === 'syncing'){
+      return { state: 'loading', msg: _genChipMsg || 'Loading LLM…' };
+    }
+    return { state: 'loading', msg: _embedChipMsg || 'Loading model…' };
+  }
+  if(_embedChipState === 'ready' || _genChipState === 'ready'){
+    const embedOk = _embedChipState === 'ready';
+    const genOk = _genChipState === 'ready';
+    let summary = 'Task understanding ready';
+    if(embedOk && genOk) summary = 'Embeddings + LLM ready';
+    else if(genOk) summary = 'LLM ready';
+    return { state: 'ready', msg: summary };
+  }
+  return { state: 'idle', msg: 'Task understanding (on-device)' };
+}
+
+/** Set the generative-LLM chip sub-state without affecting embedding state. */
+function syncGenChip(state, msg){
+  _genChipState = state || 'idle';
+  _genChipMsg = msg || '';
+  const c = _composeChipState();
+  _renderHeaderAIChip(c.state, c.msg);
+}
+
 /** Header pill: model load / ready / error — visible on every tab */
 function syncHeaderAIChip(state, msg){
+  // Record embedding state (legacy callers pass embedding updates here), then
+  // re-render the composed chip.
+  _embedChipState = state || 'idle';
+  _embedChipMsg = msg || '';
+  const c = _composeChipState();
+  _renderHeaderAIChip(c.state, c.msg);
+}
+
+function _renderHeaderAIChip(state, msg){
   const chip = document.getElementById('headerAIChip');
   if(!chip) return;
   chip.classList.remove('ai-chip--idle','ai-chip--syncing','ai-chip--ok','ai-chip--err');
@@ -514,6 +564,12 @@ function _renderUndoBtn(){
   if(!btn) return;
   btn.style.display = _undoStack.length ? '' : 'none';
   btn.innerHTML = _IC.undo + '<span>Undo (' + _undoStack.length + ')</span>';
+  if(_undoStack.length){
+    const top = _undoStack[0];
+    btn.title = 'Undo: ' + (top.label || 'last batch');
+  } else {
+    btn.title = '';
+  }
 }
 
 function _renderPendingOps(){
@@ -674,7 +730,8 @@ function intelApplyPending(){
   });
 
   if(snaps.length){
-    _pushUndo(`${applied} change${applied !== 1 ? 's' : ''}`, snaps);
+    const sourceTag = _pendingSource ? ` via ${_pendingSource}` : '';
+    _pushUndo(`${applied} change${applied !== 1 ? 's' : ''}${sourceTag}`, snaps);
     saveState('user');
     if(typeof renderTaskList === 'function') renderTaskList();
     if(typeof renderBanner === 'function') renderBanner();
@@ -1359,6 +1416,7 @@ window.intelApplyPending = intelApplyPending;
 window.intelRejectPending = intelRejectPending;
 window.intelToggleAllPending = intelToggleAllPending;
 window.syncHeaderAIChip = syncHeaderAIChip;
+window.syncGenChip = syncGenChip;
 window.syncSemanticSearchUi = syncSemanticSearchUi;
 window.headerAIClick = headerAIClick;
 window.acceptProposedOps = acceptProposedOps;
@@ -1386,11 +1444,13 @@ function renderGenSettings(){
 
   const preset = presets.find(p => p.id === cfg.modelId) || presets[0];
   const sizeMb = preset ? preset.sizeMb : 230;
+  const lastErr = typeof getGenLastError === 'function' ? getGenLastError() : null;
 
   let statusText;
   if(!cfg.enabled) statusText = 'Disabled — toggle on to download & use.';
   else if(readyThisModel) statusText = `Ready · ${dev || 'CPU'} · ${preset ? preset.label : cfg.modelId}`;
   else if(loading) statusText = 'Loading weights…';
+  else if(lastErr) statusText = 'Load failed — see details below.';
   else if(cached) statusText = 'Cached in this browser — click Load to use.';
   else statusText = `Not downloaded (~${sizeMb} MB one-time fetch).`;
 
@@ -1402,7 +1462,16 @@ function renderGenSettings(){
   else actionLabel = `Download model (~${sizeMb} MB)`;
   const actionDisabled = !cfg.enabled || loading;
 
-  const errForThisModel = _genLastError && _genLastError.modelId === cfg.modelId ? _genLastError.message : '';
+  // Prefer the per-model cached error (hides stale errors after switching presets);
+  // fall back to gen.js's last error for load failures that happen before we
+  // had a chance to key them by model (e.g. alt-slug retry failures).
+  const errForThisModel = (_genLastError && _genLastError.modelId === cfg.modelId)
+    ? _genLastError.message
+    : (lastErr || '');
+
+  const busy = loading || (typeof isGenGenerating === 'function' && isGenGenerating());
+  const disableSelect = !cfg.enabled || busy;
+  const historySize = (typeof getAskHistory === 'function') ? getAskHistory().length : 0;
 
   host.innerHTML = `
     <div class="gen-settings">
@@ -1415,7 +1484,7 @@ function renderGenSettings(){
       </p>
       <div class="gen-settings-row">
         <label for="genModelSelect" class="gen-settings-lbl">Model</label>
-        <select id="genModelSelect" onchange="selectGenModel(this.value)" ${cfg.enabled ? '' : 'disabled'}>
+        <select id="genModelSelect" onchange="selectGenModel(this.value)" ${disableSelect ? 'disabled' : ''} title="${busy ? 'Disabled while busy' : ''}">
           ${presets.map(p => {
             const pCached = typeof isGenDownloaded === 'function' && isGenDownloaded(p.id);
             const tag = pCached ? ' ✓ cached' : '';
@@ -1424,7 +1493,7 @@ function renderGenSettings(){
         </select>
       </div>
       ${preset ? `<div class="gen-settings-note">${esc(preset.note)}</div>` : ''}
-      ${ramHint === 'low' ? `<div class="gen-settings-warn">Your device reports low RAM. Consider the 135M preset.</div>` : ''}
+      ${ramHint === 'low' ? `<div class="gen-settings-warn">Your device reports low RAM. The 135M preset is recommended.</div>` : ''}
       ${ramHint === 'ios-unknown' && (preset && preset.sizeMb > 150) ? `<div class="gen-settings-warn">On iOS the WASM fallback uses extra RAM. If the tab reloads during generation, switch to the 135M preset.</div>` : ''}
       <div class="gen-settings-row">
         <label for="genTimeout" class="gen-settings-lbl">Timeout (sec)</label>
@@ -1437,15 +1506,25 @@ function renderGenSettings(){
       </div>
       ${errForThisModel ? `<div class="gen-settings-warn" id="genSettingsError" role="alert">${esc(errForThisModel)}</div>` : ''}
       <div class="gen-settings-actions">
-        <button type="button" class="btn-primary btn-sm" id="genDownloadBtn" onclick="genDownloadClick()" ${actionDisabled ? 'disabled' : ''}>
-          ${esc(actionLabel)}
-        </button>
-        ${readyThisModel ? '<button type="button" class="btn-ghost btn-sm" onclick="genAbort()">Abort generation</button>' : ''}
+        ${loading
+          ? '<button type="button" class="btn-ghost btn-sm" onclick="genAbortLoad()">Cancel download</button>'
+          : `<button type="button" class="btn-primary btn-sm" id="genDownloadBtn" onclick="genDownloadClick()" ${actionDisabled ? 'disabled' : ''}>
+              ${esc(actionLabel)}
+            </button>`}
+        ${readyThisModel && !loading ? '<button type="button" class="btn-ghost btn-sm" onclick="genAbort()">Abort generation</button>' : ''}
+      </div>
+      <div class="gen-settings-actions gen-settings-actions--secondary">
+        <button type="button" class="btn-ghost btn-sm" onclick="genClearAskHistory()" ${historySize ? '' : 'disabled'}>Clear Ask history (${historySize})</button>
+        <button type="button" class="btn-ghost btn-sm" onclick="genClearCache()">Clear LLM cache</button>
       </div>
       <p class="gen-settings-hint">
-        Clearing the LLM cache requires the browser’s own "clear site data" — the model lives in the browser HTTP cache, not IndexedDB.
+        Weights live in the browser HTTP cache. "Clear LLM cache" removes any caches we control; to force a full purge use the browser's own "Clear site data".
       </p>
     </div>`;
+
+  // Keep the task-input promo chip in sync with gen state on every render
+  // (toggle, model switch, download, error, clear — all route through here).
+  if(typeof syncAskPromoChip === 'function') syncAskPromoChip();
 }
 
 function toggleGenEnabled(){
@@ -1454,8 +1533,16 @@ function toggleGenEnabled(){
   cfg.enabled = !cfg.enabled;
   saveGenCfg(cfg);
   if(!cfg.enabled){
+    // Disabling must stop any in-flight generation and clear stale errors so
+    // re-enabling later starts from a clean slate.
     _genLastError = null;
+    if(typeof clearGenLastError === 'function') clearGenLastError();
     if(typeof genAbort === 'function'){ try{ genAbort(); }catch(e){} }
+    if(typeof genAbortLoad === 'function'){ try{ genAbortLoad(); }catch(e){} }
+  } else if(typeof intelLoad === 'function' && typeof isIntelReady === 'function' && !isIntelReady()){
+    // When enabling, warm up the embedding loader in the background so the
+    // first Ask turn has semantic retrieval ready. Cheap no-op if loaded.
+    intelLoad(() => {}).catch(() => {});
   }
   renderGenSettings();
 }
@@ -1472,6 +1559,7 @@ function selectGenModel(id){
   // source of truth. Legacy `cfg.downloaded` is re-derived by _loadGenCfg().
   saveGenCfg(cfg);
   _genLastError = null; // errors were about the previous model
+  if(typeof clearGenLastError === 'function') clearGenLastError();
   renderGenSettings();
 }
 
@@ -1488,40 +1576,47 @@ async function genDownloadClick(){
   const cfg = getGenCfg();
   if(!cfg.enabled){ cfg.enabled = true; saveGenCfg(cfg); }
   _genLastError = null;
+  if(typeof clearGenLastError === 'function') clearGenLastError();
 
   const targetModelId = cfg.modelId;
-  const btn = document.getElementById('genDownloadBtn');
-  const wrap = document.getElementById('genProgressWrap');
-  const bar = document.getElementById('genProgressBar');
-  const pct = document.getElementById('genProgressPct');
-  const txt = document.getElementById('genProgressTxt');
-  const statusEl = document.getElementById('genSettingsStatus');
 
-  if(wrap) wrap.style.display = '';
-  if(bar) bar.style.width = '0%';
-  if(pct) pct.textContent = '0%';
-  if(txt) txt.textContent = 'preparing…';
-  if(btn) btn.disabled = true;
-  if(statusEl) statusEl.textContent = 'Downloading…';
-  syncHeaderAIChip('loading', 'Loading LLM…');
+  // Render once up-front so the Cancel button replaces the Download button
+  // and the progress track appears immediately (not after the first chunk).
+  renderGenSettings();
 
+  const bar = () => document.getElementById('genProgressBar');
+  const pct = () => document.getElementById('genProgressPct');
+  const txt = () => document.getElementById('genProgressTxt');
+  const statusEl = () => document.getElementById('genSettingsStatus');
+
+  const initTxt = txt(); if(initTxt) initTxt.textContent = 'preparing…';
+  syncGenChip('loading', 'Loading LLM…');
+
+  // Monotonic aggregator: HF emits per-file progress that would otherwise snap
+  // back to 0% each time a new shard starts downloading.
   const onProgress = _makeProgressAggregator((v, ev) => {
-    if(bar) bar.style.width = v + '%';
-    if(pct) pct.textContent = v + '%';
+    const b = bar(); if(b) b.style.width = v + '%';
+    const p = pct(); if(p) p.textContent = v + '%';
     const status = ev && ev.status ? String(ev.status) : '';
     const file = ev && ev.file ? ' · ' + String(ev.file).split('/').pop() : '';
-    if(txt) txt.textContent = (status + file).slice(0, 80);
-    if(statusEl) statusEl.textContent = `Downloading · ${v}%`;
+    const t = txt(); if(t) t.textContent = (status + file).slice(0, 80);
+    const s = statusEl(); if(s) s.textContent = `Downloading · ${v}%`;
   });
 
   try{
     await genLoad(targetModelId, cfg.dtype, onProgress);
-    if(typeof markGenDownloaded === 'function') markGenDownloaded(targetModelId);
-    syncHeaderAIChip('ready', 'LLM ready');
+    // gen.js.markGenDownloaded() was already called by genLoad for whichever
+    // slug actually resolved (primary or alt), so we just mirror the legacy
+    // boolean for any external readers still consulting it.
+    const freshCfg = getGenCfg();
+    freshCfg.downloaded = true;
+    saveGenCfg(freshCfg);
+    syncGenChip('ready', 'LLM ready');
+    if(typeof syncAskPromoChip === 'function') syncAskPromoChip();
   }catch(e){
     const msg = (e && e.message) ? e.message : 'Load failed';
     _genLastError = { modelId: targetModelId, message: msg };
-    syncHeaderAIChip('error', 'LLM load failed');
+    syncGenChip('error', 'LLM load failed');
   }finally{
     renderGenSettings();
   }
@@ -1546,12 +1641,39 @@ function openGenSettingsFromAsk(){
   }catch(e){ /* best-effort */ }
 }
 
+async function genClearAskHistory(){
+  if(typeof clearAskHistory === 'function'){ clearAskHistory(); }
+  renderGenSettings();
+  _setIntelStatus('ready', 'Ask history cleared');
+}
+
+async function genClearCache(){
+  if(typeof clearLLMCache !== 'function') return;
+  // Clearing cached weights invalidates our per-model downloaded record — the
+  // next Load will actually hit the network again.
+  try{
+    const cfg = getGenCfg();
+    cfg.downloadedIds = [];
+    cfg.downloaded = false;
+    saveGenCfg(cfg);
+  }catch(_){ /* best-effort */ }
+  let removed = 0;
+  try{ removed = await clearLLMCache(); }catch(e){}
+  const msg = removed
+    ? `Removed ${removed} cached LLM entr${removed === 1 ? 'y' : 'ies'}. For a full purge use "Clear site data".`
+    : 'No app-owned LLM caches to remove. Weights may still be in the browser HTTP cache — use "Clear site data" to purge.';
+  _setIntelStatus('ready', msg.slice(0, 120));
+  renderGenSettings();
+}
+
 window.renderGenSettings = renderGenSettings;
 window.toggleGenEnabled = toggleGenEnabled;
 window.selectGenModel = selectGenModel;
 window.setGenTimeout = setGenTimeout;
 window.genDownloadClick = genDownloadClick;
 window.openGenSettingsFromAsk = openGenSettingsFromAsk;
+window.genClearAskHistory = genClearAskHistory;
+window.genClearCache = genClearCache;
 
 document.addEventListener('click', function _smartAddTagDelegate(e){
   const prev = document.getElementById('smartAddPreview');

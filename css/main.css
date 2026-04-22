@@ -2334,16 +2334,26 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
 }
 .cmdk-ask-hint{font-size:12px;color:var(--text-3);line-height:1.5}
 .cmdk-ask-hint strong{color:var(--text-2)}
-.cmdk-ask-streaming{display:flex;flex-direction:column;gap:8px}
-.cmdk-ask-label{font-size:11px;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;font-weight:600}
+.cmdk-ask-streaming{display:flex;flex-direction:column;gap:10px}
+.cmdk-ask-row{display:flex;align-items:center;gap:10px}
+.cmdk-ask-spinner{
+  display:inline-block;width:12px;height:12px;border-radius:50%;
+  border:2px solid var(--border);border-top-color:var(--accent);
+  animation:cmdk-ask-spin 0.8s linear infinite;flex-shrink:0;
+}
+@keyframes cmdk-ask-spin{to{transform:rotate(360deg)}}
+.cmdk-ask-label{font-size:12px;color:var(--text-2);font-weight:500;flex:1}
+.cmdk-ask-details{font-size:11px;color:var(--text-3)}
+.cmdk-ask-details summary{cursor:pointer;user-select:none;padding:2px 0}
+.cmdk-ask-details summary:hover{color:var(--text-2)}
 .cmdk-ask-stream{
-  font-family:var(--font-mono);font-size:12px;line-height:1.45;color:var(--text-2);
-  background:var(--bg-1);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:0;
-  max-height:30vh;overflow-y:auto;white-space:pre-wrap;word-break:break-word;
+  margin:6px 0 0;font-family:var(--font-mono);font-size:11.5px;line-height:1.45;color:var(--text-3);
+  background:var(--bg-1);border:1px solid var(--border);border-radius:6px;padding:10px 12px;
+  max-height:26vh;overflow-y:auto;white-space:pre-wrap;word-break:break-word;
 }
 .cmdk-ask-stop{
-  align-self:flex-start;padding:4px 10px;font-size:11px;font-weight:600;font-family:inherit;
-  background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:4px;cursor:pointer;
+  padding:4px 10px;font-size:11px;font-weight:600;font-family:inherit;
+  background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:4px;cursor:pointer;flex-shrink:0;
 }
 .cmdk-ask-stop:hover{background:rgba(231,76,60,.08)}
 .cmdk-ask-error{color:var(--danger);font-size:13px;line-height:1.5}
@@ -2380,7 +2390,20 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
 .gen-settings-warn{font-size:11px;color:var(--warning,#e67e22);line-height:1.4;padding:6px 10px;background:rgba(230,126,34,.08);border:1px solid rgba(230,126,34,.3);border-radius:5px}
 .gen-settings-status{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .gen-settings-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.gen-settings-actions--secondary{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border)}
 .gen-settings-hint{font-size:11px;color:var(--text-4);line-height:1.5;margin:6px 0 0}
+
+/* Ask promo chip (discoverability outside Cmd+K) */
+.ask-promo-chip{
+  margin:6px 0 0;display:inline-flex;align-items:center;gap:8px;padding:5px 10px;
+  background:var(--bg-2);border:1px solid var(--border);color:var(--text-3);
+  border-radius:999px;font-size:11px;font-family:inherit;cursor:pointer;
+}
+.ask-promo-chip:hover{color:var(--accent);border-color:var(--accent)}
+.ask-promo-chip kbd{
+  font-family:var(--font-mono);font-size:10px;background:var(--bg-1);border:1px solid var(--border);
+  padding:1px 5px;border-radius:3px;color:var(--text-2);
+}
 
 @media (max-width:640px){
   .cmdk-ask-reply{max-height:35vh}
@@ -2389,5 +2412,7 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
   .gen-settings-row{flex-direction:column;align-items:flex-start}
   .gen-settings-lbl{min-width:0}
   .gen-settings select,.gen-settings input[type=number]{width:100%}
+  .ask-promo-chip{font-size:10.5px;padding:4px 9px}
+  .ask-promo-chip kbd{font-size:9.5px;padding:1px 4px}
 }
 

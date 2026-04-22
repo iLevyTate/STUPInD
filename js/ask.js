@@ -41,10 +41,24 @@ function _askSerializeTask(t){
 
 /**
  * Pick context tasks: top-k semantic matches + recently-modified open tasks, deduped.
+ * Will lazily kick off embedding model load if the user enabled Ask but never
+ * opened Tools — but won't block the Ask turn on that (retrieval is best-effort).
  */
 async function _askBuildContext(query){
   const out = [];
   const seen = new Set();
+
+  // Kick off embedding load in the background if it's missing. We briefly
+  // await it (short timeout) so first-ever Ask turns get semantic retrieval
+  // if the model loads quickly enough.
+  if(typeof isIntelReady === 'function' && !isIntelReady() && typeof intelLoad === 'function'){
+    try{
+      await Promise.race([
+        intelLoad(),
+        new Promise(res => setTimeout(res, 2000)),
+      ]);
+    }catch(e){ /* best-effort */ }
+  }
 
   if(typeof semanticSearch === 'function' && typeof isIntelReady === 'function' && isIntelReady()){
     try{
@@ -151,6 +165,11 @@ async function askRun(query, opts){
   if(!q) return { ok:false, ops:[], rejected:[], destructiveLevel:'none', rawText:'', truncated:false, reason:'EMPTY_QUERY' };
   if(typeof isGenReady !== 'function' || !isGenReady()){
     return { ok:false, ops:[], rejected:[], destructiveLevel:'none', rawText:'', truncated:false, reason:'GEN_NOT_READY' };
+  }
+  // Defensive: if tool-schema.js somehow failed to load, bail cleanly instead
+  // of letting a ReferenceError escape to the browser console.
+  if(typeof parseOpsJson !== 'function' || typeof validateOps !== 'function'){
+    return { ok:false, ops:[], rejected:[], destructiveLevel:'none', rawText:'', truncated:false, reason:'SCHEMA_UNAVAILABLE' };
   }
 
   const contextLines = await _askBuildContext(q);
