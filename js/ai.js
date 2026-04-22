@@ -1427,7 +1427,14 @@ window.acceptProposedOps = acceptProposedOps;
 
 // Last failed load, shown inline until the user retries or changes model.
 // Keyed by modelId so switching presets clears stale error messages.
-let _genLastError = null;
+// NOTE: named `_askLoadError` (not `_genLastError`) to avoid colliding with
+// the top-level `let _genLastError` declared in js/gen.js — both files share
+// the same script scope, and a duplicate `let` throws a SyntaxError that
+// silently nukes every function in this file (Tools panel + GenAI settings
+// never mount). The authoritative plain-string error lives in gen.js and
+// is read here via getGenLastError(); this object just lets us scope the
+// UI message to the model it was actually about.
+let _askLoadError = null;
 
 function renderGenSettings(){
   const host = document.getElementById('genAISettings');
@@ -1465,8 +1472,8 @@ function renderGenSettings(){
   // Prefer the per-model cached error (hides stale errors after switching presets);
   // fall back to gen.js's last error for load failures that happen before we
   // had a chance to key them by model (e.g. alt-slug retry failures).
-  const errForThisModel = (_genLastError && _genLastError.modelId === cfg.modelId)
-    ? _genLastError.message
+  const errForThisModel = (_askLoadError && _askLoadError.modelId === cfg.modelId)
+    ? _askLoadError.message
     : (lastErr || '');
 
   const busy = loading || (typeof isGenGenerating === 'function' && isGenGenerating());
@@ -1535,7 +1542,7 @@ function toggleGenEnabled(){
   if(!cfg.enabled){
     // Disabling must stop any in-flight generation and clear stale errors so
     // re-enabling later starts from a clean slate.
-    _genLastError = null;
+    _askLoadError = null;
     if(typeof clearGenLastError === 'function') clearGenLastError();
     if(typeof genAbort === 'function'){ try{ genAbort(); }catch(e){} }
     if(typeof genAbortLoad === 'function'){ try{ genAbortLoad(); }catch(e){} }
@@ -1558,7 +1565,7 @@ function selectGenModel(id){
   // Do NOT clear the per-model download record — `isGenDownloaded(id)` is the
   // source of truth. Legacy `cfg.downloaded` is re-derived by _loadGenCfg().
   saveGenCfg(cfg);
-  _genLastError = null; // errors were about the previous model
+  _askLoadError = null; // errors were about the previous model
   if(typeof clearGenLastError === 'function') clearGenLastError();
   renderGenSettings();
 }
@@ -1575,7 +1582,7 @@ async function genDownloadClick(){
   if(typeof genLoad !== 'function') return;
   const cfg = getGenCfg();
   if(!cfg.enabled){ cfg.enabled = true; saveGenCfg(cfg); }
-  _genLastError = null;
+  _askLoadError = null;
   if(typeof clearGenLastError === 'function') clearGenLastError();
 
   const targetModelId = cfg.modelId;
@@ -1615,7 +1622,7 @@ async function genDownloadClick(){
     if(typeof syncAskPromoChip === 'function') syncAskPromoChip();
   }catch(e){
     const msg = (e && e.message) ? e.message : 'Load failed';
-    _genLastError = { modelId: targetModelId, message: msg };
+    _askLoadError = { modelId: targetModelId, message: msg };
     syncGenChip('error', 'LLM load failed');
   }finally{
     renderGenSettings();
