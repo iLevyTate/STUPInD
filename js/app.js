@@ -287,6 +287,7 @@ if(typeof renderSyncPanel==='function') renderSyncPanel();
 
 if(typeof renderAIPanel==='function') renderAIPanel();
 if(typeof renderGenSettings==='function') renderGenSettings();
+if(typeof syncAskPromoChip==='function') syncAskPromoChip();
 
 // Init calendar feeds panel + auto-refresh on boot
 if(typeof renderCalFeedsPanel==='function') renderCalFeedsPanel();
