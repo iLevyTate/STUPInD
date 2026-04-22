@@ -168,7 +168,21 @@ function _renderAskStatus(state,msg){
   }else if(state==='done'){
     reply.innerHTML='<div class="cmdk-ask-done">'+esc(msg||'Proposed.')+'</div>';
   }else if(state==='need-model'){
-    reply.innerHTML='<div class="cmdk-ask-error">Local LLM isn’t ready yet. <button type="button" class="btn-ghost btn-sm" onclick="showTab(\'settings\');closeCmdK()">Open Settings</button> to enable and download it.</div>';
+    // Message reflects whether the model just needs loading vs a full download.
+    const cfg = typeof getGenCfg === 'function' ? getGenCfg() : null;
+    const cached = !!(cfg && typeof isGenDownloaded === 'function' && isGenDownloaded(cfg.modelId));
+    const loading = typeof isGenLoading === 'function' && isGenLoading();
+    let inner;
+    if(loading){
+      inner = 'Local LLM is still loading — give it a moment and try again.';
+    }else if(!cfg || !cfg.enabled){
+      inner = 'Local LLM is off. <button type="button" class="btn-ghost btn-sm" onclick="openGenSettingsFromAsk()">Enable in Settings</button> to turn it on and download weights.';
+    }else if(cached){
+      inner = 'Local LLM is enabled but not loaded yet. <button type="button" class="btn-ghost btn-sm" onclick="openGenSettingsFromAsk()">Open Settings</button> and click Load.';
+    }else{
+      inner = 'Local LLM weights aren’t downloaded on this device. <button type="button" class="btn-ghost btn-sm" onclick="openGenSettingsFromAsk()">Open Settings</button> to download.';
+    }
+    reply.innerHTML = '<div class="cmdk-ask-error">' + inner + '</div>';
   }
 }
 async function cmdkAskSubmit(){
@@ -350,6 +364,16 @@ function hasVisibleDescendant(taskId,visibleSet){
   return getTaskDescendantIds(taskId).some(id=>visibleSet.has(id))
 }
 
+/** Compute the set of list IDs that still own at least one non-archived, non-done
+ *  task. Scans the full task array once — intended to be called by renderTaskList
+ *  and cached on window._listsWithTasksCache for the duration of one render. */
+function _computeListsWithTasks(){
+  const s=new Set();
+  for(const x of tasks){ if(!x.archived && x.status!=='done') s.add(x.listId); }
+  window._listsWithTasksCache=s;
+  return s;
+}
+
 function renderTaskItem(t,depth){
   const list=gid('taskList');
   const isActive=activeTaskId===t.id;
@@ -433,8 +457,10 @@ function renderTaskItem(t,depth){
   // Signal chips: ONLY show due date if meaningful (today/overdue/soon), and inline hidden otherwise
   let signalChips='';
   // List indicator dot — only show if viewing All and >1 list has tasks (otherwise pure noise)
+  // H2: the "which lists currently have tasks" set is O(N) over all tasks.
+  // Computing it once per render (in renderTaskList) avoids O(N²) work on long lists.
   const taskOwnerList=lists.find(l=>l.id===t.listId);
-  const listsWithTasks=new Set(tasks.filter(x=>!x.archived&&x.status!=='done').map(x=>x.listId));
+  const listsWithTasks=window._listsWithTasksCache || _computeListsWithTasks();
   if(taskOwnerList&&activeListId==='all'&&listsWithTasks.size>1){
     signalChips+='<span class="task-sig sig-list" style="background:transparent;padding:0" title="List: '+escAttr(taskOwnerList.name)+'"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+sanitizeListColor(taskOwnerList.color)+'"></span></span>';
   }
@@ -836,7 +862,35 @@ function renderBanner(){
   }
   gid('bannerTime').textContent=fmtHMS(getTaskElapsed(t))
 }
-setInterval(()=>{if(activeTaskId){renderTaskList();renderBanner()}},1000);
+/** H1: Previously this re-rendered the whole task list every second, which
+ *  burned CPU and reset scroll/hover state on long lists. Now we only patch
+ *  the active row's live-time chip and re-render the floating banner. If the
+ *  active row isn't currently rendered (filtered out, archive view, etc.),
+ *  we silently no-op. A full render still happens on real state changes. */
+function _tickActiveTaskRow(){
+  if(!activeTaskId) return;
+  const t=findTask(activeTaskId);
+  if(!t){ renderBanner(); return; }
+  const row=document.querySelector('.task-item[data-task-id="'+activeTaskId+'"]');
+  if(row){
+    let chip=row.querySelector('.sig-active');
+    const elapsed=fmtHMS(getRolledUpTime(t.id));
+    if(chip){
+      chip.textContent='● '+elapsed;
+    }else{
+      const signals=row.querySelector('.task-signals');
+      if(signals){
+        chip=document.createElement('span');
+        chip.className='task-sig sig-active';
+        chip.title='Tracking time';
+        chip.textContent='● '+elapsed;
+        signals.appendChild(chip);
+      }
+    }
+  }
+  renderBanner();
+}
+setInterval(_tickActiveTaskRow,1000);
 
 // ESC closes modal
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&gid('taskModal').classList.contains('open'))closeTaskDetail()});
