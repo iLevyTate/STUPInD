@@ -816,6 +816,12 @@
   </div>
 </div>
 
+<!-- Visible on every tab while generative weights download or rehydrate -->
+<div id="genLoadRibbon" class="gen-load-ribbon" hidden role="status" aria-live="polite">
+  <div id="genLoadRibbonTrack" class="gen-load-ribbon__track"><div id="genLoadRibbonBar" class="gen-load-ribbon__bar"></div></div>
+  <span id="genLoadRibbonTxt" class="gen-load-ribbon__txt">On-device LLM…</span>
+</div>
+
 <!-- App modules — load order matters (globals first, init last) -->
 <script src="js/icons.js"></script>
 <script src="js/utils.js"></script>

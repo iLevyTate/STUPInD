@@ -263,6 +263,7 @@ async function genLoad(modelId, dtype, onProgress){
       }catch(e){
         if(loadSignal.aborted) throw new Error('LOAD_ABORTED');
         console.warn('[gen] WebGPU pipeline failed, falling back to WASM', e);
+        try{ cb({ status: 'WebGPU unavailable — loading with WASM (CPU)', file: slug, progress: undefined }); }catch(_){}
         _genPipe = await pipeline('text-generation', slug, {
           device: 'wasm',
           dtype: wasmDtype,

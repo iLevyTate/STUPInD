@@ -45,18 +45,82 @@ function _composeChipState(){
   if(_embedChipState === 'ready' || _genChipState === 'ready'){
     const embedOk = _embedChipState === 'ready';
     const genOk = _genChipState === 'ready';
+    const genBk = genOk && typeof getGenDevice === 'function' ? _formatGenBackend(getGenDevice()) : '';
+    const genSuffix = genBk ? ' · ' + genBk : '';
     let summary = 'Task understanding ready';
-    if(embedOk && genOk) summary = 'Embeddings + LLM ready';
-    else if(genOk) summary = 'LLM ready';
+    if(embedOk && genOk) summary = 'Embeddings + LLM ready' + genSuffix;
+    else if(genOk) summary = 'LLM ready' + genSuffix;
     return { state: 'ready', msg: summary };
   }
   return { state: 'idle', msg: 'Task understanding (on-device)' };
+}
+
+/** Human-readable backend for the generative pipeline (after load). */
+function _formatGenBackend(dev){
+  if(dev === 'webgpu') return 'WebGPU';
+  if(dev === 'wasm') return 'WASM (CPU)';
+  return '';
+}
+
+function _hideGenLoadRibbon(){
+  const el = document.getElementById('genLoadRibbon');
+  if(el) el.hidden = true;
+}
+
+/**
+ * Fixed footer ribbon + Settings progress row while an LLM download/rehydrate runs.
+ * @param {number} v 0–100
+ * @param {{ status?:string, file?:string }|null} ev
+ */
+function _syncGenDownloadProgress(v, ev){
+  const pct = Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+  const bar = document.getElementById('genProgressBar');
+  const pctEl = document.getElementById('genProgressPct');
+  const txt = document.getElementById('genProgressTxt');
+  const statusEl = document.getElementById('genSettingsStatus');
+  const status = ev && ev.status ? String(ev.status) : '';
+  const file = ev && ev.file ? ' · ' + String(ev.file).split('/').pop() : '';
+  const line = (status + file).trim().slice(0, 88) || 'Fetching ONNX shards…';
+  if(bar) bar.style.width = pct + '%';
+  if(pctEl) pctEl.textContent = pct + '%';
+  if(txt) txt.textContent = line;
+  if(statusEl) statusEl.textContent = `Downloading weights · ${pct}%`;
+  const chipLine = line.length > 48 ? line.slice(0, 45) + '…' : line;
+  _genChipState = 'loading';
+  _genChipMsg = pct + '% · ' + chipLine;
+  const c = _composeChipState();
+  _renderHeaderAIChip(c.state, c.msg);
+  const ribbon = document.getElementById('genLoadRibbon');
+  const ribbonBar = document.getElementById('genLoadRibbonBar');
+  const ribbonTrack = document.getElementById('genLoadRibbonTrack');
+  const ribbonTxt = document.getElementById('genLoadRibbonTxt');
+  if(ribbon){
+    ribbon.hidden = false;
+    if(ribbonTrack) ribbonTrack.classList.remove('gen-load-ribbon__track--indeterminate');
+    if(ribbonBar) ribbonBar.style.width = pct + '%';
+    if(ribbonTxt) ribbonTxt.textContent = `On-device LLM · ${pct}% — ${line}`;
+  }
+}
+
+function _showGenLoadRibbonIndeterminate(detail){
+  const ribbon = document.getElementById('genLoadRibbon');
+  const ribbonBar = document.getElementById('genLoadRibbonBar');
+  const ribbonTrack = document.getElementById('genLoadRibbonTrack');
+  const ribbonTxt = document.getElementById('genLoadRibbonTxt');
+  if(!ribbon) return;
+  ribbon.hidden = false;
+  if(ribbonTrack) ribbonTrack.classList.add('gen-load-ribbon__track--indeterminate');
+  if(ribbonBar) ribbonBar.style.width = '40%';
+  if(ribbonTxt) ribbonTxt.textContent = detail || 'On-device LLM…';
 }
 
 /** Set the generative-LLM chip sub-state without affecting embedding state. */
 function syncGenChip(state, msg){
   _genChipState = state || 'idle';
   _genChipMsg = msg || '';
+  if(_genChipState !== 'loading' && _genChipState !== 'working' && _genChipState !== 'syncing'){
+    _hideGenLoadRibbon();
+  }
   const c = _composeChipState();
   _renderHeaderAIChip(c.state, c.msg);
 }
@@ -143,9 +207,15 @@ function syncSemanticSearchUi(){
 
 function headerAIClick(){
   const chip = document.getElementById('headerAIChip');
-  if(chip && chip.classList.contains('ai-chip--err') && typeof intelRetryLoad === 'function'){
-    intelRetryLoad();
-    return;
+  if(chip && chip.classList.contains('ai-chip--err')){
+    if(_genChipState === 'error' && typeof openGenSettingsFromAsk === 'function'){
+      openGenSettingsFromAsk();
+      return;
+    }
+    if(_embedChipState === 'error' && typeof intelRetryLoad === 'function'){
+      intelRetryLoad();
+      return;
+    }
   }
   if(typeof showTab === 'function') showTab('tools');
 }
@@ -2092,10 +2162,12 @@ function renderGenSettings(){
   const ready = typeof isGenReady === 'function' && isGenReady();
   const loading = typeof isGenLoading === 'function' && isGenLoading();
   const dev = typeof getGenDevice === 'function' ? getGenDevice() : null;
+  const devLbl = _formatGenBackend(dev) || (dev ? String(dev) : '');
   const ramHint = typeof window._mobileRamHint === 'function' ? window._mobileRamHint() : null;
   const cached = typeof isGenDownloaded === 'function' ? isGenDownloaded(cfg.modelId) : !!cfg.downloaded;
   const liveModel = typeof getGenModel === 'function' ? getGenModel() : null;
   const readyThisModel = ready && liveModel === cfg.modelId;
+  const webgpuApi = typeof navigator !== 'undefined' && navigator.gpu && typeof navigator.gpu.requestAdapter === 'function';
 
   const preset = presets.find(p => p.id === cfg.modelId) || presets[0];
   const sizeMb = preset ? preset.sizeMb : 230;
@@ -2103,10 +2175,10 @@ function renderGenSettings(){
 
   let statusText;
   if(!cfg.enabled) statusText = 'Disabled — toggle on to download & use.';
-  else if(readyThisModel) statusText = `Ready · ${dev || 'CPU'} · ${preset ? preset.label : cfg.modelId}`;
-  else if(loading) statusText = 'Loading weights…';
+  else if(readyThisModel) statusText = `Ready on ${devLbl || 'device'} · ${preset ? preset.label : cfg.modelId}`;
+  else if(loading) statusText = 'Fetching weights, then binding WebGPU or WASM…';
   else if(lastErr) statusText = 'Load failed — see details below.';
-  else if(cached) statusText = 'Cached in this browser — click Load to use.';
+  else if(cached) statusText = 'Weights cached — click Load (or wait for auto-restore).';
   else statusText = `Not downloaded (~${sizeMb} MB one-time fetch).`;
 
   let actionLabel;
@@ -2148,6 +2220,7 @@ function renderGenSettings(){
         </select>
       </div>
       ${preset ? `<div class="gen-settings-note">${esc(preset.note)}</div>` : ''}
+      ${cfg.enabled && !loading ? `<div class="gen-settings-note">${webgpuApi ? 'This browser exposes <strong>WebGPU</strong> — the LLM tries it first, then falls back to <strong>WASM</strong> if binding fails.' : 'No <code>navigator.gpu</code> — the LLM will run on <strong>WASM (CPU)</strong> only.'}</div>` : ''}
       ${ramHint === 'low' ? `<div class="gen-settings-warn">Your device reports low RAM. The 135M preset is recommended.</div>` : ''}
       ${ramHint === 'ios-unknown' && (preset && preset.sizeMb > 150) ? `<div class="gen-settings-warn">On iOS the WASM fallback uses extra RAM. If the tab reloads during generation, switch to the 135M preset.</div>` : ''}
       <div class="gen-settings-row">
@@ -2172,6 +2245,9 @@ function renderGenSettings(){
         <button type="button" class="btn-ghost btn-sm" onclick="genClearAskHistory()" ${historySize ? '' : 'disabled'}>Clear Ask history (${historySize})</button>
         <button type="button" class="btn-ghost btn-sm" onclick="genClearCache()">Clear LLM cache</button>
       </div>
+      <p class="gen-settings-hint">
+        Progress also appears in the <strong>footer bar</strong> and the header chip (percentage) while files download. After load, status shows <strong>WebGPU</strong> (GPU) or <strong>WASM (CPU)</strong> — whichever actually bound.
+      </p>
       <p class="gen-settings-hint">
         Weights live in the browser HTTP cache. "Clear LLM cache" removes any caches we control; to force a full purge use the browser's own "Clear site data".
       </p>
@@ -2239,23 +2315,15 @@ async function genDownloadClick(){
   // and the progress track appears immediately (not after the first chunk).
   renderGenSettings();
 
-  const bar = () => document.getElementById('genProgressBar');
-  const pct = () => document.getElementById('genProgressPct');
   const txt = () => document.getElementById('genProgressTxt');
-  const statusEl = () => document.getElementById('genSettingsStatus');
-
   const initTxt = txt(); if(initTxt) initTxt.textContent = 'preparing…';
-  syncGenChip('loading', 'Loading LLM…');
+  syncGenChip('loading', '0% · preparing');
+  _showGenLoadRibbonIndeterminate('Downloading LLM weight files…');
 
   // Monotonic aggregator: HF emits per-file progress that would otherwise snap
   // back to 0% each time a new shard starts downloading.
   const onProgress = _makeProgressAggregator((v, ev) => {
-    const b = bar(); if(b) b.style.width = v + '%';
-    const p = pct(); if(p) p.textContent = v + '%';
-    const status = ev && ev.status ? String(ev.status) : '';
-    const file = ev && ev.file ? ' · ' + String(ev.file).split('/').pop() : '';
-    const t = txt(); if(t) t.textContent = (status + file).slice(0, 80);
-    const s = statusEl(); if(s) s.textContent = `Downloading · ${v}%`;
+    _syncGenDownloadProgress(v, ev);
   });
 
   try{
@@ -2266,7 +2334,7 @@ async function genDownloadClick(){
     const freshCfg = getGenCfg();
     freshCfg.downloaded = true;
     saveGenCfg(freshCfg);
-    syncGenChip('ready', 'LLM ready');
+    syncGenChip('ready', '');
     if(typeof syncAskPromoChip === 'function') syncAskPromoChip();
     // LLM-dependent surfaces (parse-with-LLM button) may need to appear now.
     if(typeof maybeShowEnhanceBtn === 'function') maybeShowEnhanceBtn();
@@ -2345,10 +2413,16 @@ async function genAutoRehydrateIfCached(){
   if(!isGenDownloaded(cfg.modelId)) return;
   if(isGenReady() && typeof getGenModel === 'function' && getGenModel() === cfg.modelId) return;
   try{
-    if(typeof syncGenChip === 'function') syncGenChip('loading', 'Rehydrating LLM…');
+    if(typeof syncGenChip === 'function'){
+      syncGenChip('loading', '0% · rehydrating');
+      _showGenLoadRibbonIndeterminate('Restoring LLM from browser cache…');
+    }
     const dtype = cfg.dtype || 'q4';
-    await genLoad(cfg.modelId, dtype, () => {});
-    if(typeof syncGenChip === 'function') syncGenChip('ready', 'LLM ready');
+    const onProgress = (typeof _makeProgressAggregator === 'function')
+      ? _makeProgressAggregator((v, ev) => { _syncGenDownloadProgress(v, ev); })
+      : () => {};
+    await genLoad(cfg.modelId, dtype, onProgress);
+    if(typeof syncGenChip === 'function') syncGenChip('ready', '');
     if(typeof syncAskPromoChip === 'function') syncAskPromoChip();
     if(typeof maybeShowEnhanceBtn === 'function') maybeShowEnhanceBtn();
   }catch(e){
