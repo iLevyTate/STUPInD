@@ -778,9 +778,9 @@ function _renderPendingUpdateCard(op, idx){
     const fromDisp = esc(_formatFieldDisplay(ch.field, ch.fromVal));
     const toDisp = esc(_formatFieldDisplay(ch.field, ch.toVal));
     const pill = _pendingConfPill(ch.confidence);
-    const tip = ch.note ? esc(ch.note) : '';
+    const tip = ch.note ? escAttr(ch.note) : '';
     return `<label class="pending-change-row" ${tip ? `title="${tip}"` : ''}>
-      <input type="checkbox" class="pending-field-check" data-op-idx="${idx}" data-field="${esc(ch.field)}" checked>
+      <input type="checkbox" class="pending-field-check" data-op-idx="${idx}" data-field="${escAttr(ch.field)}" checked>
       <span class="pending-field-lbl">${esc(_humanizeFieldKey(ch.field))}</span>
       <span class="pending-field-vals"><span class="pending-field-val pending-field-from">${fromDisp}</span>
       <span class="pending-field-arrow" aria-hidden="true">→</span>
@@ -1644,7 +1644,7 @@ async function intelFindDuplicatesUI(){
     }
     sec.innerHTML = '<div class="intel-dup-hdr">Near duplicates</div>' + shown.map(p => {
       const v = verdicts.get(p.idA + '-' + p.idB);
-      const verdict = v ? `<span class="intel-dup-verdict intel-dup-verdict--${esc(v.verdict)}" title="${esc(v.reason)}">${esc(v.verdict)}</span>` : '';
+      const verdict = v ? `<span class="intel-dup-verdict intel-dup-verdict--${escAttr(v.verdict)}" title="${escAttr(v.reason)}">${esc(v.verdict)}</span>` : '';
       const reason = v && v.reason ? `<div class="intel-dup-reason">${esc(v.reason)}</div>` : '';
       return `<div class="intel-dup-row">
         <span class="intel-dup-pair">${esc(p.taskA.name.slice(0, 32))} ↔ ${esc(p.taskB.name.slice(0, 32))}</span>
@@ -2240,7 +2240,7 @@ function renderGenSettings(){
           ${presets.map(p => {
             const pCached = typeof isGenDownloaded === 'function' && isGenDownloaded(p.id);
             const tag = pCached ? ' ✓ cached' : '';
-            return `<option value="${esc(p.id)}" ${p.id === cfg.modelId ? 'selected' : ''}>${esc(p.label)} · ${p.sizeMb} MB${esc(tag)}</option>`;
+            return `<option value="${escAttr(p.id)}" ${p.id === cfg.modelId ? 'selected' : ''}>${esc(p.label)} · ${p.sizeMb} MB${esc(tag)}</option>`;
           }).join('')}
         </select>
       </div>

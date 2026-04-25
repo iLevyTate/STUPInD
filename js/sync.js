@@ -211,7 +211,15 @@ function _mergeState(remote) {
       return;
     }
 
-  const repair = (typeof _repairTask === 'function') ? _repairTask : (t=>t);
+  // SECURITY: _repairTask (storage.js) is the single point that coerces
+  // arbitrary remote task objects to a known shape. If it's missing, we have
+  // no defense against a peer sending malformed/malicious entries — refuse
+  // the merge entirely rather than passing data through unchecked.
+  if(typeof _repairTask !== 'function'){
+    console.warn('[sync] _repairTask unavailable — refusing merge to protect local state');
+    return;
+  }
+  const repair = _repairTask;
 
   let mergedTaskDels = _mergeDelMapPair(
     (typeof syncTaskDels === 'object' && syncTaskDels) ? syncTaskDels : {},

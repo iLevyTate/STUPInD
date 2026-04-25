@@ -27,7 +27,24 @@ function _openIDB(){
     req.onerror   = () => rej(req.error);
   });
 }
-function _idbSet(key,val){ _openIDB().then(db=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put(val,key); }).catch(()=>{}); }
+// Returns a Promise that resolves when the IDB transaction completes.
+// Callers that need ordering (e.g. syncBroadcast must wait until the primary
+// store confirms) should await this; older fire-and-forget call sites can
+// still ignore the return value.
+function _idbSet(key,val){
+  return _openIDB().then(db => new Promise((res, rej) => {
+    try{
+      const tx = db.transaction('kv','readwrite');
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => rej(tx.error);
+      tx.onabort = () => rej(tx.error || new Error('IDB tx aborted'));
+      tx.objectStore('kv').put(val, key);
+    }catch(err){ rej(err); }
+  })).catch(err => {
+    console.warn('[storage] IDB write failed', key, err && err.message ? err.message : err);
+    return false;
+  });
+}
 function _idbGet(key){ return _openIDB().then(db=>new Promise((res,rej)=>{ const tx=db.transaction('kv','readonly'); const r=tx.objectStore('kv').get(key); r.onsuccess=()=>res(r.result??null); r.onerror=()=>rej(r.error); })).catch(()=>null); }
 
 // ── Type coercions — repair individual bad values safely ──────────────────────
@@ -314,7 +331,7 @@ function saveState(reason){
   // than localStorage (hundreds of MB vs 5-10 MB).  We write here first so
   // even if the LS fast-path cache below hits QuotaExceededError, the user's
   // data is safe in IDB and will be recovered on the next loadState().
-  _idbSet(STORE_KEY, serialized);
+  const _idbPromise = _idbSet(STORE_KEY, serialized);
 
   // localStorage is kept as a synchronous fast-path cache and for cross-tab
   // `storage` event notifications.  Quota failures are non-fatal.
@@ -343,7 +360,14 @@ function saveState(reason){
       document.body.appendChild(w);
     }
   }
-  if(typeof syncBroadcast==='function') syncBroadcast();
+  // Defer cross-tab/P2P broadcast until IDB confirms — peers should never
+  // accept state the primary store hasn't actually persisted. If IDB rejects
+  // (quota exhausted, private-mode denial), broadcast still happens because
+  // the LS fast-path may have succeeded; the warning logged in _idbSet
+  // surfaces the issue.
+  const _broadcast = () => { if(typeof syncBroadcast==='function') syncBroadcast(); };
+  if(_idbPromise && typeof _idbPromise.then === 'function') _idbPromise.then(_broadcast, _broadcast);
+  else _broadcast();
   if(reason === 'user') showSaveIndicator();
 
   queueMicrotask(() => {
@@ -691,6 +715,7 @@ function _onStorageFromOtherTab(e){
 // authoritative and will restore via the async fallback below.
 function loadState(){
   // Try localStorage first — synchronous, fast.
+  let _lsCorrupt = false;
   try{
     const raw = localStorage.getItem(STORE_KEY);
     if(raw){
@@ -698,7 +723,20 @@ function loadState(){
       const ok = _applyState(s);
       if(ok) return true;
     }
-  }catch(e){ console.warn('[storage] localStorage load failed:',e); }
+  }catch(e){
+    _lsCorrupt = true;
+    console.warn('[storage] localStorage load failed:',e);
+    // Stash the corrupt blob under a side key so an advanced user / support
+    // can attempt manual recovery after the IDB fallback completes.
+    try{
+      const sideKey = STORE_KEY + '_corrupt_' + Date.now();
+      const corrupt = localStorage.getItem(STORE_KEY);
+      if(corrupt) localStorage.setItem(sideKey, corrupt);
+    }catch(_){}
+  }
+  if(_lsCorrupt && typeof showExportToast === 'function'){
+    setTimeout(() => showExportToast('Local cache was corrupted — restoring from backup…'), 0);
+  }
 
   // Async IDB fallback — if localStorage was empty or corrupt.
   // H5: the promise below resolves *after* the app has already initialized with
@@ -1222,7 +1260,18 @@ function archiveDay(state){
     let archives = [];
     try{
       archives = JSON.parse(localStorage.getItem(ARCHIVE_KEY)||'[]');
-    }catch(_){
+      if(!Array.isArray(archives)) archives = [];
+    }catch(err){
+      // Corrupt archive blob — preserve it under a side key so we don't silently
+      // overwrite years of history with a fresh empty array on the next push.
+      console.warn('[storage] ARCHIVE_KEY parse failed — preserving corrupt copy', err);
+      try{
+        const corrupt = localStorage.getItem(ARCHIVE_KEY);
+        if(corrupt) localStorage.setItem(ARCHIVE_KEY + '_corrupt_' + Date.now(), corrupt);
+      }catch(_){}
+      if(typeof showExportToast === 'function'){
+        showExportToast('Daily history backup was corrupted — recovery copy stored.');
+      }
       archives = [];
     }
     if(archives.find(a=>a.date===day)) {

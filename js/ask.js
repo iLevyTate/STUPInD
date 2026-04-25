@@ -405,8 +405,14 @@ async function cognitaskRun(query, opts){
         else writes.push({ name: nm, args: op.args && typeof op.args === 'object' ? op.args : {} });
       }
 
-      if(reads.length && !writes.length){
+      // If the model returned reads (with or without writes), execute the reads first
+      // so write ops never proceed on stale context. ARCHITECTURE.md documents the
+      // "reads first, then a final write turn" invariant. When both appear in one
+      // parse, we run the reads, inject results, and request a clean write turn.
+      if(reads.length){
         if(readRounds >= COGNITASK_MAX_READ_ROUNDS){
+          // Read budget exhausted — accept any writes that came along, else give up.
+          if(writes.length){ lastFinal = writes; gotParse = true; break; }
           lastFinal = [];
           gotParse = true;
           break;
@@ -416,7 +422,10 @@ async function cognitaskRun(query, opts){
         if(typeof opts.onReadRound === 'function'){ try{ opts.onReadRound({ results, readRounds }); }catch(e){} }
         messages.push({ role: 'assistant', content: raw });
         const payload = JSON.stringify(results).slice(0, 6000);
-        messages.push({ role: 'user', content: 'Tool result:\n' + payload + '\n\nNow return ONLY a JSON array of write operations (or [] if no changes), using task ids from context.' });
+        const nudge = writes.length
+          ? '\n\n(Note: write ops you proposed alongside reads were discarded — re-emit them now using the read results above.)'
+          : '';
+        messages.push({ role: 'user', content: 'Tool result:\n' + payload + '\n\nNow return ONLY a JSON array of write operations (or [] if no changes), using task ids from context.' + nudge });
         continue;
       }
 

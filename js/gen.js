@@ -215,8 +215,18 @@ async function clearLLMCache(){
   try{
     const keys = await caches.keys();
     for(const k of keys){
-      // Only touch caches we might have created, not the PWA shell cache.
-      if(k && /transformers|huggingface|gen|llm/i.test(k) && !/odtaulai-v\d/.test(k)){
+      // Only touch caches that look like Transformers.js / HF weights specifically —
+      // earlier versions matched any /llm|gen/ which could nuke unrelated caches
+      // owned by other apps on the same origin (e.g. an extension's "llm-cache").
+      if(!k) continue;
+      if(/odtaulai-v\d/.test(k)) continue;          // never touch the PWA shell
+      const looksLikeWeights =
+        /^transformers/i.test(k) ||
+        /huggingface/i.test(k) ||
+        /\bhf-/i.test(k) ||
+        /^onnx[-_]/i.test(k) ||
+        /transformers-cache/i.test(k);
+      if(looksLikeWeights){
         const ok = await caches.delete(k);
         if(ok) removed++;
       }

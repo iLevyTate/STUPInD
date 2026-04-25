@@ -38,11 +38,16 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
+  // Precache asset-by-asset with allSettled rather than addAll() so a single
+  // 404 (typo, missing file, mid-deploy race) doesn't void the entire cache
+  // and silently break offline mode. Failures are logged but non-fatal.
   e.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(c => c.addAll(ASSETS).catch(err => {
-        console.warn('[sw] precache incomplete', err && err.message ? err.message : err);
+    caches.open(CACHE_NAME).then(c => Promise.allSettled(
+      ASSETS.map(u => c.add(u).catch(err => {
+        console.warn('[sw] precache miss', u, err && err.message ? err.message : err);
+        throw err;
       }))
+    ))
   );
 });
 
@@ -69,12 +74,15 @@ self.addEventListener('fetch', e => {
   const isNavigation = e.request.mode === 'navigate' || e.request.destination === 'document' ||
     url.pathname === '/' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('index.html');
   if(isNavigation){
+    // Always cache navigation responses under the canonical './index.html'
+    // key so query strings (?utm=…, ?ref=…) don't bloat the cache with
+    // duplicates that all share the same body.
     e.respondWith(
       fetch(e.request)
         .then(res => {
           if(res && res.status === 200 && res.type === 'basic'){
             const clone = res.clone();
-            caches.open(CACHE_NAME).then(c => c.put(e.request, clone).catch(() => {}));
+            caches.open(CACHE_NAME).then(c => c.put('./index.html', clone).catch(() => {}));
           }
           return res;
         })

@@ -30,7 +30,11 @@
 <meta name="application-name" content="ODTAULAI">
 <!-- CSP: script-src / object-src / base-uri are the hard security boundaries.
      connect-src uses http:/https: broadly because calfeeds.js allows user-configured CORS proxy URLs.
-     wss: entries are required for PeerJS WebRTC signalling. -->
+     wss: entries are required for PeerJS WebRTC signalling.
+     'unsafe-inline' on script-src is currently REQUIRED because the codebase uses inline
+     onclick handlers in places (notably tasks.js, ai.js). To eventually drop it, migrate
+     those handlers to delegated event listeners. Until then, every innerHTML site that
+     interpolates user/external data MUST use escAttr() in attribute context (XSS H1). -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http: https: wss://*.peerjs.com wss://0.peerjs.com wss://1.peerjs.com wss://peerjs.com;">
 
 <!-- Icons -->

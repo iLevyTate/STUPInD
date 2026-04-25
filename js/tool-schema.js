@@ -51,6 +51,11 @@ const ENUM_FIELDS = {
   recur:    ['daily','weekdays','weekly','monthly'],
 };
 
+// LLM tool-call args are JSON, so the model frequently sends ints as
+// strings or as floats with stray .0 / .9 noise. We TRUNCATE finite numbers
+// (5.9 → 5) rather than rejecting, on the assumption that the user-visible
+// preview will let them spot wrong values. Strict types would force the model
+// into more validation-failure retry loops than the leniency saves.
 function _coerceInt(v){
   if(typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v);
   if(typeof v === 'string' && /^-?\d+$/.test(v.trim())) return parseInt(v, 10);
@@ -112,6 +117,8 @@ function _coerceArg(key, raw, ctx){
     return s.slice(0, 200) || null;
   }
   if(key === 'limit'){
+    // Lenient default: any non-numeric input (incl. "abc", null, []) silently
+    // falls back to 20. Read-only tools, so over-fetching is the worst outcome.
     const n = _coerceInt(raw);
     if(n == null) return 20;
     return Math.max(1, Math.min(100, n));
@@ -153,7 +160,11 @@ function _descendantIdsForBatchSim(rootId, tasksById){
     const pid = queue.shift();
     for(const [tid, t] of tasksById){
       if(!t) continue;
-      if((t.parentId || null) !== pid) continue;
+      // Treat any falsy parentId as "no parent" but only by explicit null/undefined
+      // check — `(t.parentId || null) !== pid` would treat parentId=0 as null,
+      // which is brittle if id 0 ever becomes valid (currently ids start at 1).
+      const pp = (t.parentId == null) ? null : t.parentId;
+      if(pp !== pid) continue;
       if(seen.has(tid)) continue;
       seen.add(tid);
       out.push(tid);

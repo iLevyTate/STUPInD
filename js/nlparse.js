@@ -43,6 +43,7 @@ async function parseQuickAddAsync(raw){
       if(start){
         const iso = _isoDate(start);
         if(iso) base.props.dueDate = iso;
+        else console.warn('[nlparse] chrono returned an invalid date for input', base.name);
       }
     }
   }catch(e){

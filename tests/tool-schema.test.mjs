@@ -322,6 +322,26 @@ test('validator: float/alphanumeric id is rejected, not silently truncated', () 
   assert.equal(r.rejected.length, 2);
 });
 
+// Pins documented leniency: numeric (not string) floats truncate via Math.trunc,
+// which lets LLMs that emit 5.0 / 5.9 still reach a real id rather than failing
+// validation. The asymmetry with the string test above is intentional —
+// see comment on _coerceInt in tool-schema.js.
+test('validator: numeric float id is truncated (not rejected)', () => {
+  const { validateOps } = loadSchema();
+  const ctx = ctxFrom([{ id: 5, archived: false }], []);
+  const r = validateOps([{ name: 'MARK_DONE', args: { id: 5.9 } }], ctx);
+  assert.equal(r.valid.length, 1);
+  assert.strictEqual(r.valid[0].args.id, 5);
+});
+
+test('validator: limit defaults to 20 for non-numeric input', () => {
+  const { validateOps } = loadSchema();
+  const ctx = ctxFrom([], []);
+  const r = validateOps([{ name: 'QUERY_TASKS', args: { limit: 'abc' } }], ctx);
+  assert.equal(r.valid.length, 1);
+  assert.strictEqual(r.valid[0].args.limit, 20);
+});
+
 test('validator: SPLIT_TASK accepts 2–8 part names, rejects single part', () => {
   const { validateOps } = loadSchema();
   const ctx = ctxFrom([{ id: 1, name: 'T', archived: false }], []);

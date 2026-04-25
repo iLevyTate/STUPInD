@@ -54,6 +54,18 @@ function renderCalendar(visibleTasks){
   container.querySelectorAll('.cal-task').forEach(el=>{
     el.onclick=function(e){e.stopPropagation();const tid=parseInt(el.dataset.taskId);if(tid)openTaskDetail(tid)};
   });
+  // SECURITY: +Task buttons on calendar feed events use data-* attrs and a delegated handler
+  // so an attacker-controlled ICS UID cannot break out of an attribute.
+  container.querySelectorAll('.cal-ev-mk-task').forEach(btn=>{
+    btn.onclick=function(e){
+      e.stopPropagation();
+      if(typeof createTaskFromCalEvent !== 'function') return;
+      const fid = btn.dataset.feedId || '';
+      const uid = btn.dataset.eventUid || '';
+      if(!uid) return;
+      createTaskFromCalEvent(fid, uid);
+    };
+  });
   container.querySelectorAll('.cal-day').forEach(el=>{
     el.ondragover=function(e){e.preventDefault();e.dataTransfer.dropEffect='move';el.classList.add('drop-target')};
     el.ondragleave=function(){el.classList.remove('drop-target')};
@@ -90,9 +102,9 @@ function renderCalTasks(arr, isoDate){
     html += showEvs.map(ev => {
       const uid = String(ev.uid || '');
       const mk = uid && typeof createTaskFromCalEvent === 'function'
-        ? `<button type="button" class="cal-ev-mk-task" title="Create task from this event" aria-label="Create task from event" onclick="event.stopPropagation();if(typeof createTaskFromCalEvent==='function')createTaskFromCalEvent(${JSON.stringify(String(ev.feedId))},${JSON.stringify(uid)})">+Task</button>`
+        ? `<button type="button" class="cal-ev-mk-task" title="Create task from this event" aria-label="Create task from event" data-feed-id="${escAttr(ev.feedId)}" data-event-uid="${escAttr(uid)}">+Task</button>`
         : '';
-      return `<div class="cal-task cal-feed-event" style="border-left-color:${sanitizeListColor(ev.feedColor)}" title="${esc(ev.feedLabel)}: ${esc(ev.title)}${ev.time?' at '+esc(String(ev.time)):''}${ev.location?' — '+esc(ev.location):''}">`
+      return `<div class="cal-task cal-feed-event" style="border-left-color:${sanitizeListColor(ev.feedColor)}" title="${escAttr(ev.feedLabel)}: ${escAttr(ev.title)}${ev.time?' at '+escAttr(String(ev.time)):''}${ev.location?' — '+escAttr(ev.location):''}">`
         + mk
         + (ev.time ? `<span class="cal-feed-time">${esc(ev.time)}</span> ` : '')
         + esc(ev.title)
@@ -955,10 +967,13 @@ function saveTaskDetail(){
   _taskModalSnapshot=null;
   gid('taskModal').classList.remove('open');
   editingTaskId=null;
-  document.removeEventListener('keydown',_taskModalTabTrap,true);
-  if(_taskModalPrevFocus&&_taskModalPrevFocus.focus)try{_taskModalPrevFocus.focus()}catch(e){}
-  _taskModalPrevFocus=null;
   }finally{
+    // Cleanup MUST run even if any of the field reads above throws —
+    // otherwise the global keydown trap leaks across modal open/close cycles
+    // and breaks Tab navigation everywhere on the page.
+    document.removeEventListener('keydown',_taskModalTabTrap,true);
+    if(_taskModalPrevFocus&&_taskModalPrevFocus.focus)try{_taskModalPrevFocus.focus()}catch(e){}
+    _taskModalPrevFocus=null;
     try{ delete t._habitCycledInSession; }catch(e){}
   }
   renderTaskList();
@@ -1132,7 +1147,7 @@ document.addEventListener('keydown',e=>{
 // ========== LOG ==========
 function addLog(name,durSec,type){timeLog.unshift({id:++logIdCtr,name,durSec,type,time:timeNow()});renderLog();saveState('user')}
 function removeLog(id){timeLog=timeLog.filter(l=>l.id!==id);renderLog();saveState('user')}
-function renderLog(){const list=gid('logList');list.querySelectorAll('.log-item').forEach(e=>e.remove());if(!timeLog.length){gid('logEmpty').style.display='';return}gid('logEmpty').style.display='none';timeLog.slice(0,40).forEach(l=>{const d=document.createElement('div');d.className='log-item';const col=l.type==='work'?'var(--work)':l.type==='short'?'var(--short)':l.type==='quick'?'#48b5e0':'var(--long)';const lid=l.id||0;const dot=document.createElement('div');dot.className='log-dot';dot.style.background=col;d.appendChild(dot);const nm=document.createElement('span');nm.className='log-name';nm.textContent=l.name;d.appendChild(nm);const dur=document.createElement('span');dur.className='log-dur';dur.textContent=fmtShort(l.durSec);d.appendChild(dur);const tm=document.createElement('span');tm.className='log-time';tm.textContent=l.time;d.appendChild(tm);if(lid){const del=document.createElement('button');del.className='log-del';del.title='Remove';del.textContent='�';del.onclick=function(){removeLog(lid)};d.appendChild(del)}list.appendChild(d)})}
+function renderLog(){const list=gid('logList');list.querySelectorAll('.log-item').forEach(e=>e.remove());if(!timeLog.length){gid('logEmpty').style.display='';return}gid('logEmpty').style.display='none';timeLog.slice(0,40).forEach(l=>{const d=document.createElement('div');d.className='log-item';const col=l.type==='work'?'var(--work)':l.type==='short'?'var(--short)':l.type==='quick'?'#48b5e0':'var(--long)';const lid=l.id||0;const dot=document.createElement('div');dot.className='log-dot';dot.style.background=col;d.appendChild(dot);const nm=document.createElement('span');nm.className='log-name';nm.textContent=l.name;d.appendChild(nm);const dur=document.createElement('span');dur.className='log-dur';dur.textContent=fmtShort(l.durSec);d.appendChild(dur);const tm=document.createElement('span');tm.className='log-time';tm.textContent=l.time;d.appendChild(tm);if(lid){const del=document.createElement('button');del.className='log-del';del.title='Remove';del.textContent='×';del.onclick=function(){removeLog(lid)};d.appendChild(del)}list.appendChild(d)})}
 function clearLog(){timeLog=[];renderLog();saveState('user')}
 
 // ========== TAB NAVIGATION ==========

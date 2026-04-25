@@ -570,7 +570,13 @@ async function removeTask(id){
     if(!(await showAppConfirm('Permanently delete "'+task.name+'"'+(descendants.length>0?' and '+descendants.length+' subtask'+(descendants.length!==1?'s':''):'')+'? Cannot be undone.')))return;
     const toRemove=[id,...descendants];
     if(toRemove.includes(activeTaskId)){
-      if(taskStartedAt){const t=findTask(activeTaskId);if(t)t.totalSec+=Math.floor((Date.now()-taskStartedAt)/1000)}
+      // Flush in-flight time to the activity log BEFORE the task is removed —
+      // adding to t.totalSec on a task that's about to be deleted just discards it.
+      if(taskStartedAt){
+        const t=findTask(activeTaskId);
+        const sec=Math.floor((Date.now()-taskStartedAt)/1000);
+        if(t&&sec>0&&typeof addLog==='function') addLog(t.name+' (deleted)',sec,'work');
+      }
       activeTaskId=null;taskStartedAt=null;
     }
     for(const rid of toRemove) _taskIndexRemove(rid);

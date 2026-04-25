@@ -161,6 +161,9 @@ function toLocalIsoTime(d){
 
 // Helper: figure out what UTC offset an IANA timezone has at a given wall-clock moment.
 // Returns minutes east of UTC. Uses Intl.DateTimeFormat trick — works in all modern browsers.
+// Caveat: relies on the browser's tzdata, which is current for "now" but may be stale for
+// historical DST rule changes (e.g. Samoa 2011, Russia 2014). Acceptable for calendar feed
+// rendering; would need a tzdata library (e.g. @date-fns/tz) for archival accuracy.
 function getTzOffsetMinutes(tzid, Y, M, D, hh, mm){
   // Build a Date pretending the wall time is UTC, then format it in the target zone
   // and see how much it shifts.
@@ -234,6 +237,9 @@ function expandEventToDateRange(event, windowDays = 180){
   }
 
   const interval = parseInt(params.INTERVAL || '1', 10);
+  // UNTIL: parseICSDate handles the Z suffix (UTC datetime) by converting to the user's
+  // local date via toLocalIsoTime, so the local-ISO comparison below is consistent.
+  // Time-precision UNTIL on timed daily events is approximated to date precision.
   const until = params.UNTIL ? parseICSDate(params.UNTIL, false) : null;
   const countSpecified = params.COUNT !== undefined && String(params.COUNT).length > 0;
   const countParsed = countSpecified ? parseInt(params.COUNT, 10) : null;
@@ -663,7 +669,7 @@ function renderCalFeedsPanel(){
           <input type="url" id="cfUrl" class="calfeed-in" placeholder="https://calendar.google.com/calendar/ical/.../private-.../basic.ics">
 
           <label class="calfeed-lbl">CORS proxy URL (required for direct fetch)</label>
-          <input type="url" id="cfProxy" class="calfeed-in" value="${esc(proxyDefault)}" placeholder="https://your-name.workers.dev/?url=">
+          <input type="url" id="cfProxy" class="calfeed-in" value="${escAttr(proxyDefault)}" placeholder="https://your-name.workers.dev/?url=">
           <p class="calfeed-hint">
             Browsers block direct fetches from Google. Options:<br>
             • <strong>Most private:</strong> <a href="#" onclick="showWorkerInstructions();return false">Deploy a free Cloudflare Worker (15 min)</a><br>
