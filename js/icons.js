@@ -15,6 +15,8 @@
     calendar:      '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     calendarWeek:  '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15h2M14 15h2M8 19h2M14 19h2"/>',
     alertTriangle: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+    alertCircle:   '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+    inbox:         '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
     circleDashed:  '<path d="M10.1 2.2a10 10 0 0 0-3.8 1.6"/><path d="M4.3 6.3A10 10 0 0 0 2.7 10"/><path d="M2.4 14a10 10 0 0 0 1.5 3.9"/><path d="M6.2 20.1a10 10 0 0 0 3.8 1.7"/><path d="M13.9 21.8a10 10 0 0 0 3.8-1.6"/><path d="M19.7 17.7a10 10 0 0 0 1.6-3.8"/><path d="M21.6 10a10 10 0 0 0-1.5-3.9"/><path d="M17.8 3.9A10 10 0 0 0 14 2.2"/>',
     star:          '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>',
     starFilled:    '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>',

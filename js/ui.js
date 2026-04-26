@@ -360,9 +360,13 @@ function renderCmdK(){
     {type:'action',label:'Go to Tools',icon:ic('toolSparkle'),kbd:'3',run:()=>showTab('tools')},
     {type:'action',label:'Go to Data',icon:ic('database'),kbd:'4',run:()=>showTab('data')},
     {type:'action',label:'Go to Settings',icon:ic('gear'),kbd:'5',run:()=>showTab('settings')},
+    {type:'action',label:'Inbox view (untriaged)',icon:ic('inbox'),run:()=>{showTab('tasks');setSmartView('inbox')}},
     {type:'action',label:'Today view',icon:ic('calendar'),run:()=>{showTab('tasks');setSmartView('today')}},
     {type:'action',label:'Overdue view',icon:ic('alertTriangle'),run:()=>{showTab('tasks');setSmartView('overdue')}},
     {type:'action',label:'Starred view',icon:ic('star'),run:()=>{showTab('tasks');setSmartView('starred')}},
+    {type:'action',label:'Waiting view (blocked on others)',icon:ic('hourglass'),run:()=>{showTab('tasks');setSmartView('waiting')}},
+    {type:'action',label:'Stuck view (untouched 14+ days)',icon:ic('alertCircle'),run:()=>{showTab('tasks');setSmartView('stuck')}},
+    {type:'action',label:'Snoozed view (hidden until a date)',icon:ic('moon'),run:()=>{showTab('tasks');setSmartView('snoozed')}},
     {type:'action',label:'Habits view (recurring tasks)',icon:ic('refresh'),run:()=>{showTab('tasks');setSmartView('habits')}},
     {type:'action',label:'Impact view (Pareto 80/20)',icon:ic('zap'),run:()=>{showTab('tasks');setSmartView('impact')}},
     {type:'action',label:'Sort by Impact (Pareto)',icon:ic('zap'),run:()=>{showTab('tasks');const s=gid('taskSortSel');if(s){s.value='impact';if(typeof updateTaskFilters==='function')updateTaskFilters()}}},
@@ -371,6 +375,23 @@ function renderCmdK(){
     {type:'action',label:'Board view',icon:ic('grid'),run:()=>{showTab('tasks');setTaskView('board')}},
     {type:'action',label:'Calendar view',icon:ic('calendar'),run:()=>{showTab('tasks');setTaskView('calendar')}},
     {type:'action',label:'Toggle theme',icon:ic('moon'),run:()=>toggleTheme()},
+    {type:'action',label:'Focus-on-list mode (hide other lists)',icon:ic('folder'),run:()=>toggleFocusListMode()},
+    {type:'action',label:(isBulkMode()?'Exit bulk-edit mode':'Bulk-edit mode (multi-select)'),icon:ic('check'),run:()=>toggleBulkMode()},
+    {type:'action',label:'Save current view…',icon:ic('star'),run:()=>savePerspectivePrompt()},
+    {type:'action',label:'Daily brief (top tasks today)',icon:ic('sparkles'),run:()=>showDailyBriefCard()},
+    {type:'action',label:'Weekly review (last 7 days)',icon:ic('clipboard'),run:()=>showWeeklyReviewCard()},
+    {type:'action',label:'AI: Rephrase open task title',icon:ic('wand'),run:()=>rephraseActiveTaskTitle()},
+    {type:'action',label:'AI: Suggest tags for open task',icon:ic('spark'),run:()=>suggestTagsForTask()},
+    {type:'action',label:'AI: Suggest due date for open task',icon:ic('calendar'),run:()=>suggestDueDateForTask()},
+    {type:'action',label:'Snooze open task — 1 day',icon:ic('moon'),run:()=>{ if(editingTaskId!=null) snoozeTaskForDays(editingTaskId,1); else if(typeof showExportToast==='function') showExportToast('Open a task first.') }},
+    {type:'action',label:'Snooze open task — 3 days',icon:ic('moon'),run:()=>{ if(editingTaskId!=null) snoozeTaskForDays(editingTaskId,3); else if(typeof showExportToast==='function') showExportToast('Open a task first.') }},
+    {type:'action',label:'Snooze open task — 1 week',icon:ic('moon'),run:()=>{ if(editingTaskId!=null) snoozeTaskForDays(editingTaskId,7); else if(typeof showExportToast==='function') showExportToast('Open a task first.') }},
+    {type:'action',label:'Unsnooze open task',icon:ic('refresh'),run:()=>{ if(editingTaskId!=null) unsnoozeTask(editingTaskId); else if(typeof showExportToast==='function') showExportToast('Open a task first.') }},
+    {type:'action',label:'Manage saved views (perspectives)',icon:ic('star'),run:()=>showManagePerspectivesCard()},
+    {type:'action',label:'Render markdown in open task description',icon:ic('book'),run:()=>{ if(typeof toggleDescriptionRender==='function') toggleDescriptionRender(); }},
+    {type:'action',label:'Export open task as Markdown',icon:ic('clipboard'),run:()=>{ if(editingTaskId!=null) exportSingleTaskAsMarkdown(editingTaskId); else if(typeof showExportToast==='function') showExportToast('Open a task first.') }},
+    {type:'action',label:'Save open task as template',icon:ic('clipboard'),run:()=>saveCurrentTaskAsTemplate()},
+    {type:'action',label:'Apply task template…',icon:ic('clipboard'),run:()=>showApplyTemplateCard()},
     {type:'action',label:'Start focus timer',icon:ic('play'),run:()=>{showTab('focus');if(!running)startTimer()}},
     {type:'action',label:'Add new list',icon:ic('plus'),run:()=>{showTab('tasks');addList()}},
     {type:'action',label:'Harmonize all fields (embeddings)',icon:ic('harmonize'),run:()=>{showTab('tools');if(typeof intelHarmonizeFields==='function')intelHarmonizeFields()}},
@@ -382,6 +403,14 @@ function renderCmdK(){
   if(askMatches){
     items.push({section:'Ask'});
     items.push(askAction);
+  }
+  // Append saved perspectives dynamically
+  if(typeof cfg === 'object' && cfg && Array.isArray(cfg.perspectives)){
+    cfg.perspectives.forEach(p => {
+      if(!p || !p.name) return;
+      const label = 'View: ' + p.name;
+      navActions.push({ type:'action', label, icon: ic('star'), run: () => applyPerspective(p.name) });
+    });
   }
   const matchedNav=q?navActions.filter(a=>a.label.toLowerCase().includes(q)):navActions;
   if(matchedNav.length){items.push({section:'Actions'});matchedNav.forEach(a=>items.push(a))}
@@ -535,8 +564,17 @@ function renderTaskItem(t,depth){
   };
   d.onclick=function(e){
     if(e.target.closest('button')||e.target.closest('.task-chevron')||e.target.closest('.drag-handle'))return;
+    if(typeof isBulkMode === 'function' && isBulkMode()){
+      bulkToggleSelect(t.id);
+      d.classList.toggle('task-bulk-selected', _bulkSelectedIds.has(t.id));
+      return;
+    }
     openTaskDetail(t.id)
   };
+  // Reflect prior bulk selection on re-render
+  if(typeof isBulkMode === 'function' && isBulkMode() && typeof _bulkSelectedIds !== 'undefined' && _bulkSelectedIds.has(t.id)){
+    d.classList.add('task-bulk-selected');
+  }
   // Swipe-to-complete for touch
   let touchStartX=0,touchStartY=0,touchCurrentX=0,swiping=false;
   d.addEventListener('touchstart',function(e){
@@ -718,6 +756,24 @@ function openTaskDetail(id){
   gid('mdCheckbox').classList.toggle('checked',t.status==='done');
   gid('mdCheckbox').textContent=t.status==='done'?'✓':'';
   gid('mdDue').value=t.dueDate||'';
+  if(gid('mdSnoozeUntil')) gid('mdSnoozeUntil').value=t.hiddenUntil||'';
+  // Type chips (task / waiting / bug / idea / errand)
+  const tChips=gid('mdTypeChips');
+  if(tChips){
+    tChips.replaceChildren();
+    [['task','Task'],['waiting','Waiting on'],['bug','Bug'],['idea','Idea'],['errand','Errand']].forEach(([key,lbl])=>{
+      const b=document.createElement('button');
+      b.type='button';
+      b.className='mfield-chip-btn'+((t.type||'task')===key?' active':'');
+      b.textContent=lbl;
+      b.onclick=function(){
+        t.type=key;
+        Array.from(tChips.children).forEach(c=>c.classList.remove('active'));
+        b.classList.add('active');
+      };
+      tChips.appendChild(b);
+    });
+  }
   gid('mdStartDate').value=t.startDate||'';
   gid('mdEstimate').value=t.estimateMin||0;
   gid('mdDesc').value=t.description||'';
@@ -776,11 +832,16 @@ function openTaskDetail(id){
     b.onclick=function(){t.energyLevel=t.energyLevel===key?null:key;[...enChips.children].forEach(c=>c.classList.remove('active'));if(t.energyLevel)b.classList.add('active')};
     enChips.appendChild(b)
   });
-  // Recurrence
-  const rc=gid('mdRecur');if(rc){rc.innerHTML='';
-    [['none','No repeat'],['daily','Daily'],['weekdays','Weekdays'],['weekly','Weekly'],['monthly','Monthly']].forEach(([key,lbl])=>{
+  // Recurrence — calendar-relative (daily/weekly/...) plus C-5 after-completion variants
+  const rc=gid('mdRecur');if(rc){rc.replaceChildren();
+    [
+      ['none','No repeat'],
+      ['daily','Daily'],['weekdays','Weekdays'],['weekly','Weekly'],['monthly','Monthly'],
+      ['after1d','After 1d'],['after3d','After 3d'],['after7d','After 7d'],['after14d','After 14d'],['after30d','After 30d'],
+    ].forEach(([key,lbl])=>{
       const b=document.createElement('button');b.className='recur-opt'+((t.recur||'none')===key?' active':'');
       b.textContent=lbl;
+      if(key && key.startsWith('after')) b.title='Schedule next due ' + key.replace(/^after(\d+)d$/, '$1 day(s)') + ' AFTER completion (won\'t pile up if you finish late)';
       b.onclick=function(){t.recur=key==='none'?null:key;[...rc.children].forEach(c=>c.classList.remove('active'));b.classList.add('active')};
       rc.appendChild(b)
     })
@@ -807,12 +868,21 @@ function openTaskDetail(id){
     catChips.appendChild(b)
   });
   const vn=gid('mdValuesNote');if(vn)vn.textContent=t.valuesNote||'';
-  // Checklist
+  // C-1: visible task ID badge near the task name
+  if(typeof renderTaskIdBadge === 'function') renderTaskIdBadge(t);
+  // Checklist (legacy single + C-7 multiple named groups)
   renderChecklist(id);
+  if(typeof renderChecklistGroups === 'function') renderChecklistGroups(id);
   // Notes
   renderTaskNotes(id);
   // Blocked by
   renderBlockedBy(id);
+  // C-9 related tasks (non-blocking links)
+  if(typeof renderRelatedTasks === 'function') renderRelatedTasks(id);
+  // C-2 activity log
+  if(typeof renderTaskActivity === 'function') renderTaskActivity(t);
+  // C-6 estimate vs actual variance
+  if(typeof renderEstimateVariance === 'function') renderEstimateVariance(t);
   refreshMdSimilarTasks(id);
   // Show the Break-down accordion only when a generative model is loaded.
   // Content is lazy-rendered on toggle to avoid spending tokens unless asked.
@@ -935,6 +1005,20 @@ function closeTaskDetail(opts){
 function saveTaskDetail(){
   if(!editingTaskId)return;
   const t=findTask(editingTaskId);if(!t)return;
+  // C-2: snapshot the fields we'll diff against post-save so we can append
+  // a per-field activity entry. Snapshot is a shallow copy of relevant fields.
+  const _activityBefore = {
+    name: t.name, dueDate: t.dueDate, hiddenUntil: t.hiddenUntil, startDate: t.startDate,
+    estimateMin: t.estimateMin, description: t.description, url: t.url,
+    completionNote: t.completionNote, remindAt: t.remindAt, listId: t.listId,
+    status: t.status, priority: t.priority, category: t.category,
+    effort: t.effort, energyLevel: t.energyLevel, type: t.type,
+    starred: t.starred,
+    tags: Array.isArray(t.tags) ? t.tags.slice() : [],
+    valuesAlignment: Array.isArray(t.valuesAlignment) ? t.valuesAlignment.slice() : [],
+    relatedTo: Array.isArray(t.relatedTo) ? t.relatedTo.slice() : [],
+    recur: t.recur,
+  };
   try{
   if(t.recur&&t.status==='done'&&typeof completeHabitCycle==='function'&&!t._habitCycledInSession){
     completeHabitCycle(t);
@@ -942,6 +1026,7 @@ function saveTaskDetail(){
   }
   t.name=gid('mdName').value.trim()||t.name;
   t.dueDate=gid('mdDue').value||null;
+  if(gid('mdSnoozeUntil')) t.hiddenUntil=gid('mdSnoozeUntil').value||null;
   t.startDate=gid('mdStartDate').value||null;
   t.estimateMin=parseInt(gid('mdEstimate').value)||0;
   t.description=gid('mdDesc').value;
@@ -952,6 +1037,8 @@ function saveTaskDetail(){
   t.listId=parseInt(gid('mdList').value)||t.listId;
   if(t.status==='done'&&!t.completedAt)t.completedAt=stampCompletion();
   if(t.status!=='done')t.completedAt=null;
+  // C-2: record diffs into task.activity[] (cap at 50 entries)
+  if(typeof recordTaskActivity === 'function') recordTaskActivity(t, _activityBefore);
   _taskModalSnapshot=null;
   gid('taskModal').classList.remove('open');
   editingTaskId=null;
@@ -1132,7 +1219,7 @@ document.addEventListener('keydown',e=>{
 // ========== LOG ==========
 function addLog(name,durSec,type){timeLog.unshift({id:++logIdCtr,name,durSec,type,time:timeNow()});renderLog();saveState('user')}
 function removeLog(id){timeLog=timeLog.filter(l=>l.id!==id);renderLog();saveState('user')}
-function renderLog(){const list=gid('logList');list.querySelectorAll('.log-item').forEach(e=>e.remove());if(!timeLog.length){gid('logEmpty').style.display='';return}gid('logEmpty').style.display='none';timeLog.slice(0,40).forEach(l=>{const d=document.createElement('div');d.className='log-item';const col=l.type==='work'?'var(--work)':l.type==='short'?'var(--short)':l.type==='quick'?'#48b5e0':'var(--long)';const lid=l.id||0;const dot=document.createElement('div');dot.className='log-dot';dot.style.background=col;d.appendChild(dot);const nm=document.createElement('span');nm.className='log-name';nm.textContent=l.name;d.appendChild(nm);const dur=document.createElement('span');dur.className='log-dur';dur.textContent=fmtShort(l.durSec);d.appendChild(dur);const tm=document.createElement('span');tm.className='log-time';tm.textContent=l.time;d.appendChild(tm);if(lid){const del=document.createElement('button');del.className='log-del';del.title='Remove';del.textContent='�';del.onclick=function(){removeLog(lid)};d.appendChild(del)}list.appendChild(d)})}
+function renderLog(){const list=gid('logList');list.querySelectorAll('.log-item').forEach(e=>e.remove());if(!timeLog.length){gid('logEmpty').style.display='';return}gid('logEmpty').style.display='none';timeLog.slice(0,40).forEach(l=>{const d=document.createElement('div');d.className='log-item';const col=l.type==='work'?'var(--work)':l.type==='short'?'var(--short)':l.type==='quick'?'#48b5e0':'var(--long)';const lid=l.id||0;const dot=document.createElement('div');dot.className='log-dot';dot.style.background=col;d.appendChild(dot);const nm=document.createElement('span');nm.className='log-name';nm.textContent=l.name;d.appendChild(nm);const dur=document.createElement('span');dur.className='log-dur';dur.textContent=fmtShort(l.durSec);d.appendChild(dur);const tm=document.createElement('span');tm.className='log-time';tm.textContent=l.time;d.appendChild(tm);if(lid){const del=document.createElement('button');del.className='log-del';del.title='Remove';del.textContent='�';del.onclick=function(){removeLog(lid)};d.appendChild(del)}list.appendChild(d)})}
 function clearLog(){timeLog=[];renderLog();saveState('user')}
 
 // ========== TAB NAVIGATION ==========
@@ -1202,7 +1289,735 @@ function miniTimerToggle(){
 }
 
 // ========== STATS ==========
-function renderStats(){gid('statPomos').textContent=totalPomos;const fm=Math.floor(totalFocusSec/60);gid('statFocus').textContent=fm>=60?Math.floor(fm/60)+'h '+fm%60+'m':fm+'m';gid('statBreaks').textContent=totalBreaks;const h=gid('historyBlocks');h.textContent='';sessionHistory.forEach(s=>{const b=document.createElement('div');b.className='hblock h'+s.type[0];h.appendChild(b)})}
+function renderStats(){gid('statPomos').textContent=totalPomos;const fm=Math.floor(totalFocusSec/60);gid('statFocus').textContent=fm>=60?Math.floor(fm/60)+'h '+fm%60+'m':fm+'m';gid('statBreaks').textContent=totalBreaks;const h=gid('historyBlocks');h.textContent='';sessionHistory.forEach(s=>{const b=document.createElement('div');b.className='hblock h'+s.type[0];h.appendChild(b)});if(typeof renderStatsByArea==='function') renderStatsByArea();if(typeof renderFocusStreak==='function') renderFocusStreak();}
+
+// ========== G-17 STATS BY LIFE AREA ==========
+// Pivot today's timeLog by the active task's category — purely from existing
+// state (no new fields). Builds the DOM with createElement / textContent so
+// untrusted task names can never form HTML.
+function renderStatsByArea(){
+  const host = gid('statsByArea');
+  if(!host) return;
+  const todays = timeLog.filter(l => l && l.type === 'work' && l.durSec > 0);
+  host.replaceChildren();
+  if(!todays.length){ host.style.display='none'; return; }
+  const byCat = new Map();
+  for(const l of todays){
+    const t = tasks.find(x => x.name === l.name);
+    const cat = (t && t.category) || 'general';
+    byCat.set(cat, (byCat.get(cat) || 0) + l.durSec);
+  }
+  const total = Array.from(byCat.values()).reduce((a,b)=>a+b,0);
+  if(!total){ host.style.display='none'; return; }
+  host.style.display='';
+  const cats = (typeof getCategoryDefs === 'function') ? getCategoryDefs() : [];
+  const labelFor = id => { const c = cats.find(c => c.id === id); return c ? c.label : id; };
+  const colorFor = id => { const c = cats.find(c => c.id === id); return (c && c.accent) || 'var(--accent)'; };
+  const title = document.createElement('div');
+  title.className = 'sba-title';
+  title.textContent = 'Today by life area';
+  host.appendChild(title);
+  const rows = Array.from(byCat.entries()).sort((a,b)=>b[1]-a[1]);
+  rows.forEach(([id,sec])=>{
+    const pct = Math.round((sec/total)*100);
+    const mins = Math.round(sec/60);
+    const row = document.createElement('div'); row.className = 'sba-row';
+    const dot = document.createElement('span'); dot.className = 'sba-dot'; dot.style.background = colorFor(id);
+    const lbl = document.createElement('span'); lbl.className = 'sba-lbl'; lbl.textContent = labelFor(id);
+    const bar = document.createElement('span'); bar.className = 'sba-bar';
+    const fill = document.createElement('span'); fill.className = 'sba-bar-fill';
+    fill.style.width = pct + '%'; fill.style.background = colorFor(id);
+    bar.appendChild(fill);
+    const val = document.createElement('span'); val.className = 'sba-val';
+    val.textContent = mins + 'm · ' + pct + '%';
+    row.append(dot, lbl, bar, val);
+    host.appendChild(row);
+  });
+}
+window.renderStatsByArea = renderStatsByArea;
+
+// ========== G-14 FOCUS STREAKS ==========
+// Aggregate the existing daily archive into a streak counter (current/best)
+// and a 56-day heatmap. Pure read of getArchives() — no new state.
+function renderFocusStreak(){
+  const host = gid('focusStreak');
+  if(!host) return;
+  let archives = [];
+  try{ archives = (typeof getArchives === 'function') ? getArchives() : []; }catch(_){}
+  const byDate = new Map(archives.map(a => [a.date, a]));
+  const today = (typeof todayKey === 'function') ? todayKey() : (new Date()).toISOString().slice(0,10);
+  if(typeof totalFocusSec === 'number' && totalFocusSec > 0){
+    byDate.set(today, { date: today, totalFocusSec, totalPomos });
+  }
+  let cur = 0, best = 0, run = 0;
+  const today0 = new Date(today + 'T00:00:00');
+  const isFocusDay = key => {
+    const a = byDate.get(key);
+    return !!(a && (a.totalPomos > 0 || a.totalFocusSec > 0));
+  };
+  for(let i = 0; i < 365; i++){
+    const d = new Date(today0); d.setDate(d.getDate() - i);
+    const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(isFocusDay(k)){
+      run++;
+      if(i === cur) cur = run;
+      if(run > best) best = run;
+    } else {
+      if(i === 0) cur = 0;
+      run = 0;
+    }
+  }
+  host.replaceChildren();
+  const top = document.createElement('div'); top.className = 'streak-row';
+  const num = document.createElement('span'); num.className = 'streak-num'; num.textContent = String(cur);
+  const lbl = document.createElement('span'); lbl.className = 'streak-lbl'; lbl.textContent = 'day streak';
+  const bst = document.createElement('span'); bst.className = 'streak-best'; bst.textContent = 'best ' + best;
+  top.append(num, lbl, bst);
+  host.appendChild(top);
+  const grid = document.createElement('div'); grid.className = 'hm-grid';
+  for(let i = 55; i >= 0; i--){
+    const d = new Date(today0); d.setDate(d.getDate() - i);
+    const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const a = byDate.get(k);
+    const min = a ? Math.round((a.totalFocusSec || 0) / 60) : 0;
+    let level = 0;
+    if(min >= 240) level = 4;
+    else if(min >= 120) level = 3;
+    else if(min >= 60) level = 2;
+    else if(min > 0) level = 1;
+    const cell = document.createElement('span');
+    cell.className = 'hm-cell hm-l' + level;
+    cell.title = k + ': ' + min + ' min';
+    grid.appendChild(cell);
+  }
+  host.appendChild(grid);
+  host.style.display = '';
+}
+window.renderFocusStreak = renderFocusStreak;
+
+// ========== G-15 SESSION-NOTE PROMPT ==========
+function showSessionNotePrompt(taskId){
+  const card = gid('mainCard');
+  if(!card) return;
+  let host = gid('sessionNotePrompt');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'sessionNotePrompt';
+    host.className = 'session-note-prompt';
+    card.parentNode.insertBefore(host, card.nextSibling);
+  }
+  const t = (typeof findTask === 'function') ? findTask(taskId) : null;
+  if(!t){ host.style.display = 'none'; return; }
+  host.replaceChildren();
+  const lbl = document.createElement('label'); lbl.className = 'snp-lbl';
+  lbl.appendChild(document.createTextNode('Quick note about your session on '));
+  const strong = document.createElement('strong'); strong.textContent = t.name || 'this task';
+  lbl.appendChild(strong);
+  host.appendChild(lbl);
+  const input = document.createElement('textarea');
+  input.id = 'sessionNoteInput'; input.className = 'snp-input';
+  input.rows = 2; input.placeholder = 'What did you get done?';
+  host.appendChild(input);
+  const actions = document.createElement('div'); actions.className = 'snp-actions';
+  const saveBtn = document.createElement('button'); saveBtn.type = 'button';
+  saveBtn.className = 'snp-save'; saveBtn.textContent = 'Save note';
+  const skipBtn = document.createElement('button'); skipBtn.type = 'button';
+  skipBtn.className = 'snp-skip'; skipBtn.textContent = 'Skip';
+  const offLbl = document.createElement('label'); offLbl.className = 'snp-off';
+  const offCb = document.createElement('input'); offCb.type = 'checkbox'; offCb.id = 'sessionNoteDisable';
+  offLbl.append(offCb, document.createTextNode(' Stop asking'));
+  actions.append(saveBtn, skipBtn, offLbl);
+  host.appendChild(actions);
+  host.style.display = '';
+  try{ input.focus(); }catch(_){}
+  const close = () => { host.style.display = 'none'; };
+  saveBtn.onclick = function(){
+    const text = (input.value || '').trim();
+    if(text){
+      if(!Array.isArray(t.notes)) t.notes = [];
+      t.notes.push({ id: Date.now() + Math.random(), text, createdAt: (typeof timeNowFull === 'function') ? timeNowFull() : new Date().toISOString() });
+      t.lastModified = Date.now();
+      if(typeof saveState === 'function') saveState('user');
+      if(typeof renderTaskList === 'function') renderTaskList();
+    }
+    if(offCb.checked){ cfg.askSessionNote = false; if(typeof saveState === 'function') saveState('user'); }
+    close();
+  };
+  skipBtn.onclick = function(){
+    if(offCb.checked){ cfg.askSessionNote = false; if(typeof saveState === 'function') saveState('user'); }
+    close();
+  };
+}
+window.showSessionNotePrompt = showSessionNotePrompt;
+
+// ========== G-10 DAILY BRIEF + G-11 WEEKLY REVIEW ==========
+// Both render as a temporary modal-ish card. They're narrative-only (no ops),
+// so no validator pipeline — but we still gate on isGenReady() and degrade
+// gracefully when the LLM hasn't been loaded.
+function _briefCard(title){
+  let host = document.getElementById('aiBriefCard');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'aiBriefCard';
+    host.className = 'ai-brief-card';
+    document.body.appendChild(host);
+  }
+  host.replaceChildren();
+  host.style.display = '';
+  const head = document.createElement('div'); head.className = 'aibc-head';
+  const h = document.createElement('span'); h.className = 'aibc-title'; h.textContent = title;
+  const close = document.createElement('button'); close.type = 'button'; close.className = 'aibc-close';
+  close.textContent = '✕'; close.onclick = function(){ host.style.display = 'none'; };
+  head.append(h, close);
+  host.appendChild(head);
+  const body = document.createElement('div'); body.className = 'aibc-body';
+  host.appendChild(body);
+  return body;
+}
+async function showDailyBriefCard(){
+  const body = _briefCard('Daily brief');
+  if(typeof isGenReady !== 'function' || !isGenReady()){
+    body.textContent = 'Load the on-device LLM (Settings → Integrations → Generative AI) to enable AI briefs.';
+    return;
+  }
+  body.textContent = 'Composing…';
+  // Gather context
+  const today = (typeof todayKey === 'function') ? todayKey() : (new Date()).toISOString().slice(0,10);
+  const open = (Array.isArray(tasks) ? tasks : []).filter(t => t && !t.archived && t.status !== 'done');
+  // Use the existing rankWhatNext for the top-N
+  let ranked = [];
+  try{ if(typeof rankWhatNext === 'function') ranked = rankWhatNext(open, {}).slice(0, 5); }catch(_){}
+  if(!ranked.length) ranked = open.slice(0, 5);
+  const topTasks = ranked.map(r => ({ name: (r.task || r).name, due: (r.task || r).dueDate || null, priority: (r.task || r).priority || 'none' }));
+  const dueTodayCount = open.filter(t => t.dueDate === today).length;
+  const overdueCount = open.filter(t => t.dueDate && t.dueDate < today).length;
+  const blockedCount = open.filter(t => Array.isArray(t.blockedBy) && t.blockedBy.length).length;
+  let events = [];
+  try{ if(typeof getCalFeedEventsForDate === 'function') events = (getCalFeedEventsForDate(today) || []).slice(0, 3).map(e => ({ time: e.time || 'all-day', summary: e.summary || '' })); }catch(_){}
+  const out = await genDailyBrief({ topTasks, dueTodayCount, overdueCount, blockedCount, events });
+  body.textContent = (typeof out === 'string' && out.trim()) ? out.trim() : '(No brief generated.)';
+}
+async function showWeeklyReviewCard(){
+  const body = _briefCard('Weekly review');
+  if(typeof isGenReady !== 'function' || !isGenReady()){
+    body.textContent = 'Load the on-device LLM (Settings → Integrations → Generative AI) to enable weekly reviews.';
+    return;
+  }
+  body.textContent = 'Reviewing…';
+  const all = Array.isArray(tasks) ? tasks : [];
+  const weekAgoMs = Date.now() - 7 * 86400000;
+  const stuckCutoff = Date.now() - 7 * 86400000;
+  const isoDateOnly = s => (typeof s === 'string') ? s.slice(0, 10) : '';
+  const done = all.filter(t => t && t.status === 'done' && t.completedAt && new Date(isoDateOnly(t.completedAt) + 'T00:00:00').getTime() >= weekAgoMs);
+  const blocked = all.filter(t => t && !t.archived && t.status !== 'done' && Array.isArray(t.blockedBy) && t.blockedBy.length);
+  const stuck = all.filter(t => t && !t.archived && t.status !== 'done' && typeof t.lastModified === 'number' && t.lastModified > 0 && t.lastModified < stuckCutoff);
+  // Reopened detection: tasks that have completedAt cleared but had it before — we don't track this explicitly; approximate as tasks with `notes` mentioning "reopen" or with recent updates and status open. Skip for now.
+  const reopened = [];
+  const out = await genWeeklyReview({
+    doneCount: done.length,
+    done: done.slice(0, 12).map(t => ({ name: t.name, completedAt: t.completedAt })),
+    reopened: reopened.slice(0, 6),
+    blocked: blocked.slice(0, 6).map(t => ({ name: t.name, blockedBy: (t.blockedBy || []).slice(0, 3) })),
+    stuck: stuck.slice(0, 6).map(t => ({ name: t.name, lastModified: t.lastModified })),
+  });
+  body.textContent = (typeof out === 'string' && out.trim()) ? out.trim() : '(No review generated.)';
+}
+window.showDailyBriefCard = showDailyBriefCard;
+window.showWeeklyReviewCard = showWeeklyReviewCard;
+
+// ========== G-9 REPHRASE / G-13 AUTO-TAG (per-task surface) ==========
+// Surfaced via task-detail drawer buttons (wired below) and palette commands.
+async function rephraseActiveTaskTitle(taskId){
+  const id = taskId != null ? taskId : editingTaskId;
+  if(id == null){
+    if(typeof showExportToast === 'function') showExportToast('Open a task first (click any task), then rerun this action.');
+    return;
+  }
+  if(typeof isGenReady !== 'function' || !isGenReady()){
+    if(typeof showExportToast === 'function') showExportToast('Load the LLM first (Settings → Integrations → Generative AI)');
+    return;
+  }
+  const t = (typeof findTask === 'function') ? findTask(id) : null;
+  if(!t) return;
+  const next = await genRephrase(t);
+  if(!next || next === t.name) return;
+  // Land in the existing op preview pipeline instead of mutating directly.
+  if(typeof acceptProposedOps === 'function'){
+    await acceptProposedOps([{ name: 'UPDATE_TASK', args: { id: t.id, name: next }, _rationale: 'AI rephrase suggestion' }], { source: 'ai-rephrase', destructiveLevel: 'none' });
+  }
+}
+async function suggestTagsForTask(taskId){
+  const id = taskId != null ? taskId : editingTaskId;
+  if(id == null){
+    if(typeof showExportToast === 'function') showExportToast('Open a task first (click any task), then rerun this action.');
+    return;
+  }
+  if(typeof isGenReady !== 'function' || !isGenReady()){
+    if(typeof showExportToast === 'function') showExportToast('Load the LLM first (Settings → Integrations → Generative AI)');
+    return;
+  }
+  const t = (typeof findTask === 'function') ? findTask(id) : null;
+  if(!t || typeof genSuggestTags !== 'function') return;
+  const allTags = new Set();
+  (Array.isArray(tasks) ? tasks : []).forEach(x => (x.tags || []).forEach(tg => allTags.add(tg)));
+  const res = await genSuggestTags(t, Array.from(allTags));
+  if(!res || !Array.isArray(res.tags) || !res.tags.length) return;
+  const newOnes = res.tags.filter(tg => !(t.tags || []).includes(tg));
+  if(!newOnes.length){
+    if(typeof showExportToast === 'function') showExportToast('No new tags to suggest');
+    return;
+  }
+  if(typeof acceptProposedOps === 'function'){
+    const ops = newOnes.map(tag => ({ name: 'ADD_TAG', args: { id: t.id, tag }, _rationale: res.rationale || '' }));
+    await acceptProposedOps(ops, { source: 'ai-tag-suggest', destructiveLevel: 'none' });
+  }
+}
+async function suggestDueDateForTask(taskId){
+  const id = taskId != null ? taskId : editingTaskId;
+  if(id == null){
+    if(typeof showExportToast === 'function') showExportToast('Open a task first (click any task), then rerun this action.');
+    return;
+  }
+  const t = (typeof findTask === 'function') ? findTask(id) : null;
+  if(!t || typeof predictDueDate !== 'function') return;
+  if(typeof isIntelReady !== 'function' || !isIntelReady()){
+    if(typeof showExportToast === 'function') showExportToast('Load embeddings first (Tools tab)');
+    return;
+  }
+  const next = await predictDueDate(t.name);
+  if(!next){
+    if(typeof showExportToast === 'function') showExportToast('No similar tasks with due dates yet — try again later');
+    return;
+  }
+  if(t.dueDate === next){
+    if(typeof showExportToast === 'function') showExportToast('Suggested date matches the current due date');
+    return;
+  }
+  if(typeof acceptProposedOps === 'function'){
+    await acceptProposedOps([{ name: 'UPDATE_TASK', args: { id: t.id, dueDate: next }, _rationale: 'kNN median of similar tasks' }], { source: 'ai-due-suggest', destructiveLevel: 'none' });
+  }
+}
+window.rephraseActiveTaskTitle = rephraseActiveTaskTitle;
+window.suggestTagsForTask = suggestTagsForTask;
+window.suggestDueDateForTask = suggestDueDateForTask;
+
+// ========== G-18 TODAY-VIEW CALENDAR EVENTS ==========
+// Show today's calendar events as a compact strip above the task list when
+// the user is on the Today smart view. Read-only — uses existing parser.
+function renderTodayCalEvents(){
+  const host = gid('todayCalEvents');
+  if(!host) return;
+  if(typeof smartView !== 'string' || smartView !== 'today'){ host.style.display = 'none'; host.replaceChildren(); return; }
+  if(typeof getCalFeedEventsForDate !== 'function'){ host.style.display = 'none'; return; }
+  const todayK = (typeof todayKey === 'function') ? todayKey() : (new Date()).toISOString().slice(0,10);
+  let evs = [];
+  try{ evs = getCalFeedEventsForDate(todayK) || []; }catch(_){}
+  if(!evs.length){ host.style.display = 'none'; host.replaceChildren(); return; }
+  evs.sort((a,b)=>{
+    if(a.allDay && !b.allDay) return -1;
+    if(!a.allDay && b.allDay) return 1;
+    return String(a.time||'').localeCompare(String(b.time||''));
+  });
+  host.replaceChildren();
+  const head = document.createElement('div');
+  head.className = 'tce-head';
+  head.textContent = evs.length === 1 ? '1 event today' : evs.length + ' events today';
+  host.appendChild(head);
+  const wrap = document.createElement('div');
+  wrap.className = 'tce-list';
+  evs.slice(0, 8).forEach(ev => {
+    const row = document.createElement('div');
+    row.className = 'tce-row';
+    const dot = document.createElement('span');
+    dot.className = 'tce-dot';
+    dot.style.background = ev.feedColor || 'var(--accent)';
+    const tm = document.createElement('span');
+    tm.className = 'tce-time';
+    tm.textContent = ev.allDay ? 'All day' : (ev.time || '').slice(0, 5);
+    const title = document.createElement('span');
+    title.className = 'tce-title';
+    title.textContent = ev.summary || '(no title)';
+    if(ev.location){ title.title = ev.location; }
+    const feed = document.createElement('span');
+    feed.className = 'tce-feed';
+    feed.textContent = ev.feedLabel || '';
+    row.append(dot, tm, title, feed);
+    wrap.appendChild(row);
+  });
+  host.appendChild(wrap);
+  host.style.display = '';
+}
+window.renderTodayCalEvents = renderTodayCalEvents;
+
+// ========== G-4 BULK-SELECT EDIT MODE ==========
+// Multi-select tasks then batch-apply ops through the existing
+// acceptProposedOps pipeline (which gives the user a preview + undo).
+const _bulkSelectedIds = new Set();
+function isBulkMode(){ return !!(typeof cfg === 'object' && cfg && cfg.bulkMode); }
+function toggleBulkMode(){
+  if(typeof cfg !== 'object' || !cfg) return;
+  cfg.bulkMode = !cfg.bulkMode;
+  if(!cfg.bulkMode) _bulkSelectedIds.clear();
+  document.body.classList.toggle('app-bulk-mode', !!cfg.bulkMode);
+  if(typeof renderTaskList === 'function') renderTaskList();
+  renderBulkBar();
+  if(typeof saveState === 'function') saveState('user');
+}
+function bulkToggleSelect(id){
+  const n = parseInt(id, 10);
+  if(!Number.isFinite(n)) return;
+  if(_bulkSelectedIds.has(n)) _bulkSelectedIds.delete(n);
+  else _bulkSelectedIds.add(n);
+  renderBulkBar();
+  // Also flip the checkbox visual on the row
+  const cb = document.querySelector('.task-bulk-cb[data-id="' + n + '"]');
+  if(cb) cb.checked = _bulkSelectedIds.has(n);
+}
+function bulkClear(){
+  _bulkSelectedIds.clear();
+  document.querySelectorAll('.task-bulk-cb').forEach(cb => { cb.checked = false; });
+  renderBulkBar();
+}
+function bulkSelectVisible(){
+  const visible = Array.isArray(tasks) ? tasks.filter(t => typeof matchesFilters === 'function' && matchesFilters(t)) : [];
+  visible.forEach(t => _bulkSelectedIds.add(t.id));
+  document.querySelectorAll('.task-bulk-cb').forEach(cb => {
+    const n = parseInt(cb.dataset.id, 10);
+    if(_bulkSelectedIds.has(n)) cb.checked = true;
+  });
+  renderBulkBar();
+}
+async function _bulkApplyOps(makeOps){
+  if(!_bulkSelectedIds.size) return;
+  const ids = Array.from(_bulkSelectedIds);
+  const ops = ids.flatMap(id => makeOps(id)).filter(Boolean);
+  if(!ops.length) return;
+  // Validate before previewing — surfaces destructive-ACK levels
+  if(typeof validateOps === 'function'){
+    const tasksById = new Map((tasks || []).map(t => [t.id, t]));
+    const listsById = new Map((lists || []).map(l => [l.id, l]));
+    const v = validateOps(ops, { tasksById, listsById });
+    if(typeof acceptProposedOps === 'function'){
+      await acceptProposedOps(v.valid, { source: 'bulk', destructiveLevel: v.destructiveLevel });
+    }
+  } else if(typeof acceptProposedOps === 'function'){
+    await acceptProposedOps(ops, { source: 'bulk', destructiveLevel: 'none' });
+  }
+  // Selection persists so the user can adjust, but we exit bulk mode after
+  // a destructive batch so the chips stop blocking.
+  if(ops.some(o => o.name === 'ARCHIVE_TASK' || o.name === 'DELETE_TASK')) {
+    _bulkSelectedIds.clear();
+  }
+  renderBulkBar();
+}
+function bulkArchive(){ return _bulkApplyOps(id => [{ name: 'ARCHIVE_TASK', args: { id } }]); }
+function bulkStar(){ return _bulkApplyOps(id => [{ name: 'TOGGLE_STAR', args: { id } }]); }
+function bulkSetPriority(p){
+  if(!['urgent','high','normal','low','none'].includes(p)) return;
+  return _bulkApplyOps(id => [{ name: 'UPDATE_TASK', args: { id, priority: p } }]);
+}
+function bulkAddTag(tag){
+  const t = String(tag || '').replace(/^#/, '').trim();
+  if(!t) return;
+  return _bulkApplyOps(id => [{ name: 'ADD_TAG', args: { id, tag: t } }]);
+}
+function bulkChangeList(listId){
+  const n = parseInt(listId, 10);
+  if(!Number.isFinite(n)) return;
+  return _bulkApplyOps(id => [{ name: 'CHANGE_LIST', args: { id, listId: n } }]);
+}
+function bulkAddTagPrompt(){
+  const t = prompt('Tag to add to ' + _bulkSelectedIds.size + ' selected task' + (_bulkSelectedIds.size === 1 ? '' : 's') + ':');
+  if(t) bulkAddTag(t);
+}
+function renderBulkBar(){
+  let bar = document.getElementById('bulkBar');
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'bulkBar';
+    bar.className = 'bulk-bar';
+    document.body.appendChild(bar);
+  }
+  if(!isBulkMode() || _bulkSelectedIds.size === 0){ bar.style.display = 'none'; return; }
+  bar.replaceChildren();
+  const count = document.createElement('span');
+  count.className = 'bulk-count';
+  count.textContent = _bulkSelectedIds.size + ' selected';
+  bar.appendChild(count);
+  const mkBtn = (label, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'bulk-btn';
+    b.textContent = label;
+    b.onclick = fn;
+    return b;
+  };
+  bar.appendChild(mkBtn('Star', bulkStar));
+  bar.appendChild(mkBtn('Archive', bulkArchive));
+  bar.appendChild(mkBtn('Tag…', bulkAddTagPrompt));
+  // Priority dropdown
+  const prSel = document.createElement('select');
+  prSel.className = 'bulk-sel';
+  const prOpts = [['','Set priority…'],['urgent','Urgent'],['high','High'],['normal','Normal'],['low','Low'],['none','None']];
+  prOpts.forEach(([v,l])=>{ const o=document.createElement('option'); o.value=v; o.textContent=l; prSel.appendChild(o); });
+  prSel.onchange = function(){ if(prSel.value) bulkSetPriority(prSel.value); prSel.value=''; };
+  bar.appendChild(prSel);
+  // List dropdown
+  if(Array.isArray(lists) && lists.length > 1){
+    const lsSel = document.createElement('select');
+    lsSel.className = 'bulk-sel';
+    const placeholder = document.createElement('option'); placeholder.value=''; placeholder.textContent='Move to list…';
+    lsSel.appendChild(placeholder);
+    lists.forEach(l => { const o=document.createElement('option'); o.value=String(l.id); o.textContent=l.name; lsSel.appendChild(o); });
+    lsSel.onchange = function(){ if(lsSel.value) bulkChangeList(lsSel.value); lsSel.value=''; };
+    bar.appendChild(lsSel);
+  }
+  bar.appendChild(mkBtn('Select all visible', bulkSelectVisible));
+  const close = mkBtn('✕', toggleBulkMode);
+  close.className = 'bulk-btn bulk-close';
+  bar.appendChild(close);
+  bar.style.display = '';
+}
+window.toggleBulkMode = toggleBulkMode;
+window.bulkToggleSelect = bulkToggleSelect;
+window.bulkClear = bulkClear;
+window.bulkSelectVisible = bulkSelectVisible;
+window.renderBulkBar = renderBulkBar;
+window._bulkSelectedIds = _bulkSelectedIds;
+
+// ========== G-5 PERSPECTIVES (Saved Filter Sets) ==========
+// Snapshot the current filter/sort/view tuple under a user-chosen name.
+function _currentPerspectiveTuple(){
+  const so = gid('taskSortSel'), gr = gid('groupBySel'), st = gid('filterStatus'), pr = gid('filterPriority'), ca = gid('filterCategory'), srch = gid('taskSearch');
+  return {
+    smartView: typeof smartView === 'string' ? smartView : 'all',
+    status:    st ? st.value : 'all',
+    priority:  pr ? pr.value : 'all',
+    category:  ca ? ca.value : 'all',
+    sort:      so ? so.value : 'manual',
+    group:     gr ? gr.value : 'none',
+    search:    srch ? srch.value : '',
+    activeListId: typeof activeListId !== 'undefined' ? activeListId : null,
+  };
+}
+function showManagePerspectivesCard(){
+  const arr = (typeof cfg === 'object' && cfg && Array.isArray(cfg.perspectives)) ? cfg.perspectives : [];
+  let host = document.getElementById('perspectivesCard');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'perspectivesCard';
+    host.className = 'ai-brief-card';
+    document.body.appendChild(host);
+  }
+  host.replaceChildren();
+  host.style.display = '';
+  const head = document.createElement('div'); head.className = 'aibc-head';
+  const h = document.createElement('span'); h.className = 'aibc-title'; h.textContent = 'Saved views';
+  const close = document.createElement('button'); close.type = 'button'; close.className = 'aibc-close';
+  close.textContent = '✕'; close.onclick = function(){ host.style.display = 'none'; };
+  head.append(h, close);
+  host.appendChild(head);
+  const body = document.createElement('div'); body.className = 'aibc-body';
+  if(!arr.length){
+    body.textContent = 'No saved views yet. Use the command palette ("Save current view…") to create one.';
+  } else {
+    arr.forEach(p => {
+      if(!p || !p.name) return;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)';
+      const apply = document.createElement('button');
+      apply.type = 'button';
+      apply.className = 'bulk-btn';
+      apply.style.flex = '1';
+      apply.textContent = p.name;
+      apply.onclick = function(){ applyPerspective(p.name); host.style.display = 'none'; };
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'bulk-btn bulk-close';
+      del.textContent = '✕';
+      del.title = 'Delete this saved view';
+      del.onclick = function(){ removePerspective(p.name); showManagePerspectivesCard(); };
+      row.append(apply, del);
+      body.appendChild(row);
+    });
+  }
+  host.appendChild(body);
+}
+window.showManagePerspectivesCard = showManagePerspectivesCard;
+
+function _ensurePerspectivesArray(){
+  if(typeof cfg !== 'object' || !cfg) return [];
+  if(!Array.isArray(cfg.perspectives)) cfg.perspectives = [];
+  return cfg.perspectives;
+}
+function savePerspectivePrompt(){
+  const name = prompt('Name this view (e.g. "Today @work", "Stuck deep work"):');
+  if(!name) return;
+  savePerspective(name);
+}
+function savePerspective(name){
+  const trimmed = String(name || '').trim().slice(0, 64);
+  if(!trimmed) return;
+  const arr = _ensurePerspectivesArray();
+  const tuple = _currentPerspectiveTuple();
+  const existing = arr.findIndex(p => p && p.name === trimmed);
+  const entry = { name: trimmed, view: tuple };
+  if(existing >= 0) arr[existing] = entry;
+  else arr.push(entry);
+  if(typeof saveState === 'function') saveState('user');
+  if(typeof showExportToast === 'function') showExportToast('View saved: ' + trimmed);
+}
+function applyPerspective(name){
+  const arr = _ensurePerspectivesArray();
+  const p = arr.find(x => x && x.name === name);
+  if(!p || !p.view) return;
+  const v = p.view;
+  if(v.smartView && typeof setSmartView === 'function') setSmartView(v.smartView);
+  const setIf = (id, val) => { const el = gid(id); if(el && val != null){ el.value = val; } };
+  setIf('filterStatus',   v.status);
+  setIf('filterPriority', v.priority);
+  setIf('filterCategory', v.category);
+  setIf('taskSortSel',    v.sort);
+  setIf('groupBySel',     v.group);
+  setIf('taskSearch',     v.search || '');
+  if(v.activeListId != null && typeof switchList === 'function') switchList(v.activeListId);
+  if(typeof updateTaskFilters === 'function') updateTaskFilters();
+  if(typeof showTab === 'function') showTab('tasks');
+}
+function removePerspective(name){
+  if(typeof cfg !== 'object' || !cfg || !Array.isArray(cfg.perspectives)) return;
+  cfg.perspectives = cfg.perspectives.filter(p => !p || p.name !== name);
+  if(typeof saveState === 'function') saveState('user');
+}
+window.savePerspective = savePerspective;
+window.savePerspectivePrompt = savePerspectivePrompt;
+window.applyPerspective = applyPerspective;
+window.removePerspective = removePerspective;
+
+// ========== G-12 VOICE QUICK-ADD ==========
+// Uses Web Speech API — fully browser-native (Chrome/Edge/Safari/iOS Safari).
+// Transcribes into the existing taskInput so all the smart-add / nlparse
+// downstream still applies.
+let _voiceRec = null;
+let _voiceActive = false;
+function _voiceSupport(){
+  return typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+function showVoiceButtonIfSupported(){
+  const btn = gid('taskVoiceBtn');
+  if(!btn) return;
+  btn.style.display = _voiceSupport() ? '' : 'none';
+}
+function toggleVoiceInput(){
+  if(_voiceActive){ stopVoiceInput(); return; }
+  startVoiceInput();
+}
+function startVoiceInput(){
+  const Ctor = _voiceSupport();
+  if(!Ctor) return;
+  if(_voiceRec){ try{ _voiceRec.abort(); }catch(_){} }
+  const rec = new Ctor();
+  rec.continuous = false;
+  rec.interimResults = true;
+  rec.lang = (navigator.language || 'en-US');
+  const inp = gid('taskInput');
+  const btn = gid('taskVoiceBtn');
+  let baseValue = (inp && inp.value) || '';
+  rec.onstart = function(){
+    _voiceActive = true;
+    if(btn) btn.classList.add('on');
+  };
+  rec.onresult = function(e){
+    let txt = '';
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      txt += e.results[i][0].transcript;
+    }
+    if(inp){
+      inp.value = (baseValue ? (baseValue + ' ') : '') + txt.trim();
+      if(typeof maybeShowEnhanceBtn === 'function') maybeShowEnhanceBtn();
+    }
+  };
+  rec.onerror = function(e){
+    console.warn('[voice] recognition error', e && e.error);
+    stopVoiceInput();
+  };
+  rec.onend = function(){
+    _voiceActive = false;
+    _voiceRec = null;
+    if(btn) btn.classList.remove('on');
+  };
+  _voiceRec = rec;
+  try{ rec.start(); }catch(e){ console.warn('[voice] start failed', e); }
+}
+function stopVoiceInput(){
+  if(_voiceRec){ try{ _voiceRec.stop(); }catch(_){} }
+  _voiceActive = false;
+  const btn = gid('taskVoiceBtn');
+  if(btn) btn.classList.remove('on');
+}
+window.toggleVoiceInput = toggleVoiceInput;
+window.startVoiceInput = startVoiceInput;
+window.stopVoiceInput = stopVoiceInput;
+window.showVoiceButtonIfSupported = showVoiceButtonIfSupported;
+window.addEventListener('DOMContentLoaded', showVoiceButtonIfSupported);
+
+// ========== G-24 MODAL FOCUS TRAP ==========
+// Generic focus-trap helper. Existing modals open via `.open` class — we
+// hook the document keydown to detect Tab/Shift+Tab inside any visible modal.
+function _focusableInside(root){
+  if(!root) return [];
+  const sel = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  return Array.from(root.querySelectorAll(sel)).filter(el => el.offsetParent !== null && !el.hasAttribute('aria-hidden'));
+}
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Tab') return;
+  // Find the topmost open modal-ish container.
+  const candidates = [
+    document.getElementById('cmdkOverlay'),
+    document.getElementById('taskModal'),
+    document.getElementById('bulkImportModal'),
+    document.getElementById('whatNextOverlay'),
+    document.getElementById('aiBriefCard'),
+  ].filter(Boolean);
+  const open = candidates.find(el => {
+    const cls = el.classList;
+    if(cls.contains('open')) return true;
+    if(el.style && el.style.display && el.style.display !== 'none' && cls.contains('cmdk-overlay')) return true;
+    if(el.id === 'aiBriefCard' && el.style.display !== 'none') return true;
+    return false;
+  });
+  if(!open) return;
+  const focusables = _focusableInside(open);
+  if(!focusables.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if(e.shiftKey){
+    if(document.activeElement === first || !open.contains(document.activeElement)){
+      e.preventDefault();
+      try{ last.focus(); }catch(_){}
+    }
+  } else {
+    if(document.activeElement === last){
+      e.preventDefault();
+      try{ first.focus(); }catch(_){}
+    }
+  }
+});
+
+// ========== G-7 FOCUS-ON-LIST MODE ==========
+function toggleFocusListMode(){
+  cfg.focusListMode = !cfg.focusListMode;
+  document.body.classList.toggle('app-focus-list', !!cfg.focusListMode);
+  if(typeof renderTaskList === 'function') renderTaskList();
+  if(typeof saveState === 'function') saveState('user');
+}
+window.toggleFocusListMode = toggleFocusListMode;
+function _applyFocusListClass(){
+  if(typeof cfg === 'object' && cfg && cfg.focusListMode){
+    document.body.classList.add('app-focus-list');
+  }
+}
+window.addEventListener('DOMContentLoaded', _applyFocusListClass);
 async function resetStats(){
   if(!(await showAppConfirm('Reset today\'s pomodoro stats and time log? Tasks and goals are not affected. A snapshot is archived to Past Days if there is progress to keep.')))return;
   const state={date:todayKey(),totalPomos,totalBreaks,totalFocusSec,goals:goals.map(g=>({text:g.text,done:g.done,doneAt:g.doneAt})),tasks:tasks.map(t=>({name:t.name,totalSec:getTaskElapsed(t),sessions:t.sessions})),timeLog,sessionHistory};
@@ -1211,5 +2026,384 @@ async function resetStats(){
   renderStats();renderPips();renderGoalList();renderTaskList();renderLog();renderBanner();renderArchive();saveState('user');
   if(typeof _updateActiveTaskTickSchedule==='function')_updateActiveTaskTickSchedule();
 }
-function updateTitle(){if(running)document.title=(phase==='work'?'🔴':'🟢')+' '+fmt(remaining)+' — '+getPL(phase);else if(finished)document.title='✅ '+getPL(phase)+' Complete';else document.title='ODTAULAI'}
+function updateTitle(){if(running)document.title=(phase==='work'?'🔴':'🟢')+' '+fmt(remaining)+' — '+getPL(phase);else if(finished)document.title='✅ '+getPL(phase)+' Complete';else document.title='OdTauLai'}
+
+// ========== C-1 Task ID badge ==========
+function renderTaskIdBadge(t){
+  if(!t) return;
+  const stats = document.getElementById('mdStats');
+  if(!stats) return;
+  let badge = stats.querySelector('.md-task-id');
+  if(!badge){
+    badge = document.createElement('span');
+    badge.className = 'md-task-id';
+    stats.appendChild(badge);
+  }
+  badge.textContent = ' · #' + (t.id != null ? t.id : '?');
+  badge.title = 'Task ID — use in task references';
+}
+window.renderTaskIdBadge = renderTaskIdBadge;
+
+// ========== C-2 Activity log ==========
+function recordTaskActivity(t, before){
+  if(!t || !before) return;
+  if(!Array.isArray(t.activity)) t.activity = [];
+  const at = (typeof timeNowFull === 'function') ? timeNowFull() : new Date().toISOString();
+  const fmt = v => {
+    if(v == null) return '';
+    if(Array.isArray(v)) return v.join(', ');
+    return String(v);
+  };
+  const eq = (a, b) => {
+    if(Array.isArray(a) && Array.isArray(b)){
+      if(a.length !== b.length) return false;
+      const sa = a.slice().sort(); const sb = b.slice().sort();
+      for(let i = 0; i < sa.length; i++) if(sa[i] !== sb[i]) return false;
+      return true;
+    }
+    return (a == null ? '' : a) === (b == null ? '' : b);
+  };
+  for(const k of Object.keys(before)){
+    const a = before[k]; const b = t[k];
+    if(!eq(a, b)){
+      t.activity.push({ at, field: k, from: fmt(a).slice(0, 80), to: fmt(b).slice(0, 80) });
+    }
+  }
+  if(t.activity.length > 50) t.activity = t.activity.slice(-50);
+}
+window.recordTaskActivity = recordTaskActivity;
+
+function renderTaskActivity(t){
+  if(!t) return;
+  let host = document.getElementById('mdActivity');
+  if(!host){
+    const desc = document.getElementById('mdDesc');
+    if(!desc || !desc.parentNode) return;
+    host = document.createElement('div');
+    host.id = 'mdActivity';
+    host.className = 'md-activity';
+    desc.parentNode.parentNode.appendChild(host);
+  }
+  host.replaceChildren();
+  if(!Array.isArray(t.activity) || !t.activity.length){
+    host.style.display = 'none';
+    return;
+  }
+  host.style.display = '';
+  const head = document.createElement('div');
+  head.className = 'md-activity-head';
+  head.textContent = 'Activity (last ' + Math.min(t.activity.length, 8) + ')';
+  host.appendChild(head);
+  const list = document.createElement('ul');
+  list.className = 'md-activity-list';
+  t.activity.slice(-8).reverse().forEach(a => {
+    const li = document.createElement('li');
+    const when = document.createElement('span'); when.className = 'mda-when'; when.textContent = String(a.at).slice(0, 16);
+    const what = document.createElement('span'); what.className = 'mda-what';
+    const fromTo = a.from ? '“' + a.from + '” → ' : '';
+    what.textContent = a.field + ': ' + fromTo + '“' + a.to + '”';
+    li.append(when, what);
+    list.appendChild(li);
+  });
+  host.appendChild(list);
+}
+window.renderTaskActivity = renderTaskActivity;
+
+// ========== C-3 Markdown render in description ==========
+function renderMarkdownInline(text){
+  const escapeHtml = s => String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const lines = String(text || '').split('\n');
+  const out = [];
+  let inList = false;
+  for(const raw of lines){
+    let line = escapeHtml(raw);
+    line = line.replace(/`([^`]+)`/g, '<code>$1</code>');
+    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    line = line.replace(/(^|\W)\*([^*\s][^*]*?)\*(\W|$)/g, '$1<em>$2</em>$3');
+    line = line.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    if(/^### (.+)/.test(raw)){ if(inList){ out.push('</ul>'); inList=false;} out.push('<h4>' + line.replace(/^### /, '') + '</h4>'); continue; }
+    if(/^## (.+)/.test(raw)){  if(inList){ out.push('</ul>'); inList=false;} out.push('<h3>' + line.replace(/^## /,  '') + '</h3>'); continue; }
+    if(/^# (.+)/.test(raw)){   if(inList){ out.push('</ul>'); inList=false;} out.push('<h2>' + line.replace(/^# /,   '') + '</h2>'); continue; }
+    const bullet = raw.match(/^\s*[-*]\s+(.+)/);
+    if(bullet){
+      if(!inList){ out.push('<ul>'); inList = true; }
+      out.push('<li>' + line.replace(/^\s*[-*]\s+/, '') + '</li>');
+      continue;
+    }
+    if(inList){ out.push('</ul>'); inList = false; }
+    if(raw.trim() === '') out.push('<br>');
+    else out.push('<p>' + line + '</p>');
+  }
+  if(inList) out.push('</ul>');
+  return out.join('');
+}
+window.renderMarkdownInline = renderMarkdownInline;
+function _safeWriteMarkdown(host, src){
+  const html = renderMarkdownInline(src);
+  const doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
+  const wrap = doc.body.firstChild;
+  host.replaceChildren();
+  while(wrap && wrap.firstChild){
+    host.appendChild(wrap.firstChild);
+  }
+}
+function toggleDescriptionRender(){
+  const ta = document.getElementById('mdDesc');
+  let view = document.getElementById('mdDescView');
+  if(!ta) return;
+  if(view){
+    view.remove();
+    ta.style.display = '';
+    const btn = document.getElementById('mdDescToggle');
+    if(btn) btn.textContent = 'Render markdown';
+    return;
+  }
+  view = document.createElement('div');
+  view.id = 'mdDescView';
+  view.className = 'md-desc-view';
+  _safeWriteMarkdown(view, ta.value || '');
+  ta.style.display = 'none';
+  ta.parentNode.insertBefore(view, ta.nextSibling);
+  const btn = document.getElementById('mdDescToggle');
+  if(btn) btn.textContent = 'Edit';
+}
+window.toggleDescriptionRender = toggleDescriptionRender;
+
+// ========== C-4 Single-task export ==========
+function exportSingleTaskAsMarkdown(taskId){
+  const id = taskId != null ? taskId : editingTaskId;
+  if(id == null) return;
+  const t = (typeof findTask === 'function') ? findTask(id) : null;
+  if(!t) return;
+  const lines = [];
+  lines.push('# ' + (t.name || 'Task'));
+  lines.push('');
+  if(t.priority && t.priority !== 'none') lines.push('**Priority:** ' + t.priority);
+  if(t.status) lines.push('**Status:** ' + t.status);
+  if(t.dueDate) lines.push('**Due:** ' + t.dueDate);
+  if(t.startDate) lines.push('**Start:** ' + t.startDate);
+  if(t.hiddenUntil) lines.push('**Snoozed until:** ' + t.hiddenUntil);
+  if(t.category) lines.push('**Life area:** ' + t.category);
+  if(t.effort) lines.push('**Effort:** ' + t.effort);
+  if(t.energyLevel) lines.push('**Energy:** ' + t.energyLevel);
+  if(Array.isArray(t.tags) && t.tags.length) lines.push('**Tags:** ' + t.tags.map(x => '#' + x).join(' '));
+  if(t.url) lines.push('**URL:** ' + t.url);
+  if(t.estimateMin) lines.push('**Estimate:** ' + t.estimateMin + ' min');
+  if(t.totalSec) lines.push('**Tracked:** ' + Math.round(t.totalSec / 60) + ' min · ' + (t.sessions || 0) + ' sessions');
+  if(t.description){ lines.push(''); lines.push(t.description); }
+  const allLists = [];
+  if(Array.isArray(t.checklists) && t.checklists.length) allLists.push(...t.checklists);
+  if(Array.isArray(t.checklist) && t.checklist.length) allLists.push({ name: 'Checklist', items: t.checklist });
+  if(allLists.length){
+    lines.push('');
+    allLists.forEach(g => {
+      lines.push('## ' + (g.name || 'Checklist'));
+      (g.items || []).forEach(c => lines.push('- [' + (c.done ? 'x' : ' ') + '] ' + (c.text || '')));
+    });
+  }
+  if(Array.isArray(t.notes) && t.notes.length){
+    lines.push('');
+    lines.push('## Notes');
+    t.notes.forEach(n => lines.push('- ' + (n.createdAt || '') + ' — ' + (n.text || '')));
+  }
+  if(t.completionNote){ lines.push(''); lines.push('## Completion note'); lines.push(t.completionNote); }
+  if(Array.isArray(t.activity) && t.activity.length){
+    lines.push('');
+    lines.push('## Activity');
+    t.activity.slice(-10).forEach(a => {
+      const fromTo = a.from ? '“' + a.from + '” → ' : '';
+      lines.push('- ' + a.at + ' — ' + a.field + ': ' + fromTo + '“' + a.to + '”');
+    });
+  }
+  lines.push('');
+  lines.push('— task #' + t.id);
+  const md = lines.join('\n');
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const slug = (t.name || 'task').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'task';
+  a.download = 'odtaulai-task-' + slug + '-' + t.id + '.md';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  if(typeof showExportToast === 'function') showExportToast('Exported task — ' + a.download);
+}
+window.exportSingleTaskAsMarkdown = exportSingleTaskAsMarkdown;
+
+// ========== C-6 Estimate vs actual variance ==========
+function renderEstimateVariance(t){
+  if(!t) return;
+  let host = document.getElementById('mdVariance');
+  if(!host){
+    const tracked = document.getElementById('mdTracked');
+    if(!tracked || !tracked.parentNode) return;
+    host = document.createElement('div');
+    host.id = 'mdVariance';
+    host.className = 'md-variance';
+    tracked.parentNode.parentNode.appendChild(host);
+  }
+  host.replaceChildren();
+  const est = parseInt(t.estimateMin, 10) || 0;
+  const act = Math.round((t.totalSec || 0) / 60);
+  if(est <= 0 || act <= 0){ host.style.display = 'none'; return; }
+  host.style.display = '';
+  const ratio = act / est;
+  const pct = Math.round((ratio - 1) * 100);
+  const label = document.createElement('span');
+  label.className = 'mdv-label';
+  label.textContent = 'Variance';
+  const val = document.createElement('span');
+  val.className = 'mdv-val';
+  val.textContent = (pct >= 0 ? '+' : '') + pct + '% (estimate ' + est + 'm · actual ' + act + 'm)';
+  if(ratio > 1.25) val.classList.add('mdv-over');
+  else if(ratio < 0.75) val.classList.add('mdv-under');
+  else val.classList.add('mdv-ok');
+  host.append(label, val);
+}
+window.renderEstimateVariance = renderEstimateVariance;
+
+// ========== C-7 Multiple named checklists ==========
+function renderChecklistGroups(taskId){
+  const t = (typeof findTask === 'function') ? findTask(taskId) : null;
+  if(!t) return;
+  const legacyHost = document.getElementById('mdChecklist');
+  if(!legacyHost) return;
+  let host = document.getElementById('mdChecklistGroups');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'mdChecklistGroups';
+    host.className = 'md-checklist-groups';
+    legacyHost.parentNode.appendChild(host);
+  }
+  host.replaceChildren();
+  if(!Array.isArray(t.checklists)) t.checklists = [];
+  t.checklists.forEach(group => {
+    const wrap = document.createElement('div'); wrap.className = 'mclg-group';
+    const head = document.createElement('div'); head.className = 'mclg-head';
+    const title = document.createElement('input');
+    title.type = 'text'; title.className = 'mclg-name';
+    title.value = group.name || ''; title.placeholder = 'Checklist name';
+    title.onchange = function(){ group.name = title.value.trim() || 'Checklist'; if(typeof saveState==='function') saveState('user'); };
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'mclg-rm';
+    rm.textContent = '✕'; rm.title = 'Remove this checklist';
+    rm.onclick = function(){
+      t.checklists = t.checklists.filter(g => g !== group);
+      renderChecklistGroups(taskId);
+      if(typeof saveState==='function') saveState('user');
+    };
+    head.append(title, rm);
+    wrap.appendChild(head);
+    const list = document.createElement('ul'); list.className = 'mclg-items';
+    if(!Array.isArray(group.items)) group.items = [];
+    group.items.forEach((c, idx) => {
+      const li = document.createElement('li');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = !!c.done;
+      cb.onchange = function(){
+        c.done = cb.checked;
+        c.doneAt = cb.checked ? (new Date()).toISOString() : null;
+        if(typeof saveState==='function') saveState('user');
+      };
+      const txt = document.createElement('input');
+      txt.type = 'text'; txt.className = 'mclg-item-txt';
+      txt.value = c.text || ''; txt.placeholder = 'Item';
+      txt.onchange = function(){ c.text = txt.value.trim(); if(!c.text){ group.items.splice(idx, 1); renderChecklistGroups(taskId); } if(typeof saveState==='function') saveState('user'); };
+      const xb = document.createElement('button');
+      xb.type = 'button'; xb.className = 'mclg-item-x';
+      xb.textContent = '×';
+      xb.onclick = function(){ group.items.splice(idx, 1); renderChecklistGroups(taskId); if(typeof saveState==='function') saveState('user'); };
+      li.append(cb, txt, xb);
+      list.appendChild(li);
+    });
+    wrap.appendChild(list);
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'mclg-add';
+    add.textContent = '+ item';
+    add.onclick = function(){
+      group.items.push({ id: Date.now() + Math.random(), text: '', done: false, doneAt: null });
+      renderChecklistGroups(taskId);
+      setTimeout(() => {
+        const inputs = wrap.querySelectorAll('.mclg-item-txt');
+        if(inputs.length) inputs[inputs.length - 1].focus();
+      }, 50);
+    };
+    wrap.appendChild(add);
+    host.appendChild(wrap);
+  });
+  const addGroup = document.createElement('button');
+  addGroup.type = 'button'; addGroup.className = 'mclg-add-group';
+  addGroup.textContent = '+ checklist group';
+  addGroup.onclick = function(){
+    if(!Array.isArray(t.checklists)) t.checklists = [];
+    t.checklists.push({ id: Date.now() + Math.random(), name: 'Checklist ' + (t.checklists.length + 1), items: [] });
+    renderChecklistGroups(taskId);
+    if(typeof saveState==='function') saveState('user');
+  };
+  host.appendChild(addGroup);
+}
+window.renderChecklistGroups = renderChecklistGroups;
+
+// ========== C-9 Linked / related tasks ==========
+function renderRelatedTasks(taskId){
+  const t = (typeof findTask === 'function') ? findTask(taskId) : null;
+  if(!t) return;
+  const blocked = document.getElementById('mdBlockedBy');
+  if(!blocked || !blocked.parentNode) return;
+  let host = document.getElementById('mdRelatedTo');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'mdRelatedTo';
+    host.className = 'md-related';
+    const wrap = document.createElement('div');
+    wrap.className = 'mfield';
+    const lbl = document.createElement('div');
+    lbl.className = 'mfield-lbl';
+    lbl.textContent = 'Related tasks (non-blocking links)';
+    wrap.append(lbl, host);
+    blocked.parentNode.parentNode.insertBefore(wrap, blocked.parentNode.nextSibling);
+  }
+  host.replaceChildren();
+  if(!Array.isArray(t.relatedTo)) t.relatedTo = [];
+  t.relatedTo.forEach((rid, idx) => {
+    const other = (typeof findTask === 'function') ? findTask(rid) : null;
+    if(!other) return;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'related-chip';
+    chip.textContent = '#' + rid + ' ' + (other.name || '').slice(0, 40);
+    chip.onclick = function(){ closeTaskDetail(); openTaskDetail(rid); };
+    const x = document.createElement('span');
+    x.className = 'related-x';
+    x.textContent = '×';
+    x.title = 'Unlink';
+    x.onclick = function(ev){
+      ev.stopPropagation();
+      t.relatedTo.splice(idx, 1);
+      renderRelatedTasks(taskId);
+      if(typeof saveState==='function') saveState('user');
+    };
+    chip.appendChild(x);
+    host.appendChild(chip);
+  });
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'related-add';
+  add.textContent = '+ link';
+  add.onclick = function(){
+    const idStr = prompt('Task ID to link (visible as #N in the drawer header):');
+    if(!idStr) return;
+    const n = parseInt(String(idStr).replace(/^#/, ''), 10);
+    if(!Number.isFinite(n) || n <= 0) return;
+    if(n === t.id){ alert('A task can\'t be linked to itself.'); return; }
+    if(!findTask(n)){ alert('No task with id #' + n); return; }
+    if(!Array.isArray(t.relatedTo)) t.relatedTo = [];
+    if(!t.relatedTo.includes(n)) t.relatedTo.push(n);
+    renderRelatedTasks(taskId);
+    if(typeof saveState==='function') saveState('user');
+  };
+  host.appendChild(add);
+}
+window.renderRelatedTasks = renderRelatedTasks;
 
