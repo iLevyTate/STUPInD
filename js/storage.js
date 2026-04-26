@@ -1,5 +1,5 @@
 // ========== PERSISTENCE ==========
-// Internal keys keep stupind_* prefix so existing installs retain data after rebrand to ODTAULAI.
+// Internal keys keep stupind_* prefix so existing installs retain data after rebrand to OdTauLai.
 const STORE_KEY     = (window.ODTAULAI_CONFIG && window.ODTAULAI_CONFIG.STORAGE_KEYS && window.ODTAULAI_CONFIG.STORAGE_KEYS.STATE) || 'stupind_state';
 const ARCHIVE_KEY   = (window.ODTAULAI_CONFIG && window.ODTAULAI_CONFIG.STORAGE_KEYS && window.ODTAULAI_CONFIG.STORAGE_KEYS.ARCHIVE) || 'stupind_archive';
 const SCHEMA_VERSION = 6;
@@ -65,9 +65,12 @@ function _repairTask(t){
     // Dates
     dueDate:      t.dueDate   ? _str(t.dueDate)   : null,
     startDate:    t.startDate ? _str(t.startDate) : null,
+    // hiddenUntil: snooze/defer — task hidden from main views while > today.
+    // Distinct from dueDate (deadline) and remindAt (notification trigger).
+    hiddenUntil:  t.hiddenUntil ? _str(t.hiddenUntil) : null,
     remindAt:     t.remindAt  ? _str(t.remindAt)  : null,
     reminderFired:_bool(t.reminderFired, false),
-    recur:        _enum(t.recur, ['daily','weekdays','weekly','monthly'], null) ?? (t.recur&&typeof t.recur==='string'?null:null),
+    recur:        _enum(t.recur, ['daily','weekdays','weekly','monthly','after1d','after3d','after7d','after14d','after30d'], null) ?? (t.recur&&typeof t.recur==='string'?null:null),
     // Text fields
     description:  _str(t.description, ''),
     url:          t.url ? _str(t.url) : null,
@@ -81,17 +84,41 @@ function _repairTask(t){
     // Arrays
     tags:         _arr(t.tags).filter(x=>typeof x==='string'),
     blockedBy:    _arr(t.blockedBy).map(x=>_int(x)).filter(x=>x>0),
+    // C-9: linked / related tasks (separate from blockers — non-binding cross-references)
+    relatedTo:    _arr(t.relatedTo).map(x=>_int(x)).filter(x=>x>0),
+    // Legacy single checklist — kept for backwards compatibility. New code should
+    // prefer task.checklists below; on first load, the legacy entries are
+    // promoted into a default group named "Checklist".
     checklist:    _arr(t.checklist).map(c=>({
                     id:    _int(c.id, 0),
                     text:  _str(c.text, ''),
                     done:  _bool(c.done, false),
                     doneAt:c.doneAt ? _str(c.doneAt) : null,
                   })).filter(c=>c.text),
+    // C-7: named checklists. Migration: if task has legacy `checklist[]` but no
+    // `checklists[]`, the renderer will fold it into checklists on first save.
+    checklists:   _arr(t.checklists).map(g=>({
+                    id:    g.id != null ? _int(g.id, Date.now()) : (Date.now()+Math.random()),
+                    name:  _str(g.name, 'Checklist'),
+                    items: _arr(g.items).map(c=>({
+                      id:    _int(c.id, 0),
+                      text:  _str(c.text, ''),
+                      done:  _bool(c.done, false),
+                      doneAt:c.doneAt ? _str(c.doneAt) : null,
+                    })).filter(c=>c.text),
+                  })).filter(g=>g.name),
     notes:        _arr(t.notes).map(n=>({
                     id:        n.id||Date.now()+Math.random(),
                     text:      _str(n.text, ''),
                     createdAt: _str(n.createdAt, ''),
                   })).filter(n=>n.text),
+    // C-2: per-task activity log — appended on each save when fields change
+    activity:     _arr(t.activity).map(a=>({
+                    at:    _str(a.at, ''),
+                    field: _str(a.field, ''),
+                    from:  a.from === undefined ? null : a.from,
+                    to:    a.to === undefined ? null : a.to,
+                  })).filter(a=>a.at && a.field).slice(-50),
     // v4+ task metadata
     type:         _enum(t.type, ['task','bug','idea','errand','waiting'], 'task'),
     effort:       _enum(t.effort, ['xs','s','m','l','xl'], null) ?? null,
@@ -409,6 +436,11 @@ function _applyState(s){
       setToggle('togSound', _bool(cfg.sound,true));
       setToggle('togLink',  _bool(cfg.linkTask,true));
       setToggle('togNotif', cfg.notif!==false);
+      setToggle('togSnpNote', cfg.askSessionNote!==false);
+      // G-16: restore phase-preset dropdown selection
+      const cp=gid('cfgPreset'); if(cp && typeof cfg.phasePreset==='string') cp.value=cfg.phasePreset;
+      // G-7: restore focus-list-mode body class so the saved layout matches
+      if(cfg.focusListMode){ try{ document.body.classList.add('app-focus-list'); }catch(_){}}
     } else if(typeof ensureClassificationConfig === 'function'){
       ensureClassificationConfig(cfg);
     }
@@ -499,7 +531,7 @@ function _applyState(s){
     if(s.phase && ['work','short','long'].includes(s.phase)) phase = s.phase;
 
     // Intervals + quick timers
-    if(Array.isArray(s.intervals)){  intervals = s.intervals; intIdCtr = _int(s.intIdCtr,0); }
+    if(Array.isArray(s.intervals)){  intervals = s.intervals.map(iv=>({...iv, target: iv.target || 'pomo'})); intIdCtr = _int(s.intIdCtr,0); }
     if(Array.isArray(s.quickTimers)){
       quickTimers = s.quickTimers; qtIdCtr = _int(s.qtIdCtr,0);
       quickTimers.forEach(qt=>{
@@ -554,8 +586,9 @@ function _mergeTimeLogById(a, b){
 
 function _mergeIntervalsById(a, b){
   const m = new Map();
-  for(const x of a || []){ if(x && x.id != null) m.set(x.id, x); }
-  for(const x of b || []){ if(x && x.id != null) m.set(x.id, x); }
+  const norm = x => ({...x, target: x.target || 'pomo'});
+  for(const x of a || []){ if(x && x.id != null) m.set(x.id, norm(x)); }
+  for(const x of b || []){ if(x && x.id != null) m.set(x.id, norm(x)); }
   return Array.from(m.values());
 }
 
@@ -624,14 +657,24 @@ function _mergeRemoteStateLww(raw){
     syncListDels = _mergeDelPair(typeof syncListDels === 'object' && syncListDels ? syncListDels : {}, r.syncListDels);
     syncGoalDels = _mergeDelPair(typeof syncGoalDels === 'object' && syncGoalDels ? syncGoalDels : {}, r.syncGoalDels);
 
-    totalPomos     = Math.max(totalPomos, _int(r.totalPomos, 0));
-    totalBreaks    = Math.max(totalBreaks, _int(r.totalBreaks, 0));
-    totalFocusSec  = Math.max(totalFocusSec, _int(r.totalFocusSec, 0));
-    pomosInCycle   = Math.max(pomosInCycle, _int(r.pomosInCycle, 0));
+    // LWW for stat counters and the cycle counter: take incoming only when remote
+    // stateEpoch is newer. Math.max here would inflate counters and (worse) break
+    // the long-break cadence when pomosInCycle gets stuck above cfg.cycle.
+    const _localEpoch = typeof stateEpoch === 'number' && stateEpoch > 0 ? stateEpoch : 0;
+    const _remoteEpoch = typeof r.stateEpoch === 'number' && r.stateEpoch > 0 ? r.stateEpoch : 0;
+    const _takeRemote = _remoteEpoch > _localEpoch;
+    if(_takeRemote){
+      totalPomos    = _int(r.totalPomos,    totalPomos);
+      totalBreaks   = _int(r.totalBreaks,   totalBreaks);
+      totalFocusSec = _int(r.totalFocusSec, totalFocusSec);
+      pomosInCycle  = _int(r.pomosInCycle,  pomosInCycle);
+    }
+    // Id allocators must monotonically grow regardless of epoch — otherwise a tab
+    // could re-allocate an id that already exists elsewhere.
     logIdCtr       = Math.max(logIdCtr, _int(r.logIdCtr, 0));
     intIdCtr       = Math.max(intIdCtr, _int(r.intIdCtr, 0));
-    if(typeof r.stateEpoch === 'number' && r.stateEpoch > 0)
-      stateEpoch = Math.max(typeof stateEpoch === 'number' ? stateEpoch : 0, r.stateEpoch);
+    if(_remoteEpoch > 0)
+      stateEpoch = Math.max(_localEpoch, _remoteEpoch);
     if(typeof rebuildTaskIdIndex === 'function') rebuildTaskIdIndex();
     if(typeof repairOrphanedTaskParents === 'function') repairOrphanedTaskParents();
     if(activeTaskId && typeof findTask === 'function' && !findTask(activeTaskId)) activeTaskId = null;
@@ -962,6 +1005,200 @@ function exportTasksJSON(){
   URL.revokeObjectURL(a.href);
   if(typeof showExportToast === 'function') showExportToast('Exported JSON — '+jname);
 }
+
+// ── G-23 Encrypted JSON backup (passphrase → PBKDF2 → AES-GCM) ────────────
+// Pure SubtleCrypto. Wire format (JSON): {kind,version,kdf:{name,salt,iter,hash},
+// cipher:{name,iv}, ciphertext, exportedAt}. Salt + IV are base64 random bytes.
+const _ENC_KIND = 'odtaulai-encrypted';
+const _ENC_VERSION = 1;
+const _ENC_PBKDF2_ITER = 200000;
+function _b64encode(bytes){
+  let s = '';
+  for(let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function _b64decode(b64){
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for(let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+async function _deriveBackupKey(passphrase, salt){
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey'],
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: _ENC_PBKDF2_ITER, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+async function exportDataEncrypted(){
+  if(!('crypto' in window) || !crypto.subtle){
+    alert('Encrypted export requires SubtleCrypto — your browser does not support it.');
+    return;
+  }
+  const passphrase = prompt('Backup passphrase (write it down — without it the backup is unrecoverable):');
+  if(!passphrase) return;
+  const confirm = prompt('Re-enter the passphrase to confirm:');
+  if(confirm !== passphrase){
+    alert('Passphrases did not match — aborted.');
+    return;
+  }
+  // Reuse exportData's payload by calling it indirectly — easier: rebuild the
+  // payload here so we don't trigger the file download twice.
+  const payload = {
+    kind: 'odtaulai-backup',
+    version: SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    state: {
+      v: SCHEMA_VERSION,
+      tasks, lists, listIdCtr, taskIdCtr, activeListId,
+      goals, goalIdCtr, logIdCtr, timeLog,
+      sessionHistory, totalPomos, totalBreaks, totalFocusSec,
+      collapsedSections, taskGroupBy, smartView, taskSortBy, taskView, taskFilters,
+      cfg, theme, pomosInCycle, totalDuration, remaining, finished, phase,
+      activeTab, syncTaskDels, syncListDels, syncGoalDels, stateEpoch,
+    },
+    archive: getArchives(),
+  };
+  const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const key  = await _deriveBackupKey(passphrase, salt);
+  const ct   = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const wrap = {
+    kind: _ENC_KIND,
+    version: _ENC_VERSION,
+    kdf:    { name: 'PBKDF2', salt: _b64encode(salt), iter: _ENC_PBKDF2_ITER, hash: 'SHA-256' },
+    cipher: { name: 'AES-GCM', iv: _b64encode(iv) },
+    ciphertext: _b64encode(new Uint8Array(ct)),
+    exportedAt: new Date().toISOString(),
+  };
+  const blob = new Blob([JSON.stringify(wrap)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const fname = 'odtaulai-encrypted-' + todayKey() + '.json';
+  a.download = fname;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  if(typeof showExportToast === 'function') showExportToast('Encrypted backup downloaded — ' + fname);
+}
+async function importDataEncrypted(file){
+  if(!file) return;
+  if(!('crypto' in window) || !crypto.subtle){
+    alert('Encrypted import requires SubtleCrypto — your browser does not support it.');
+    return;
+  }
+  const text = await file.text();
+  let wrap;
+  try{ wrap = JSON.parse(text); }catch(e){ alert('Not a valid JSON file.'); return; }
+  if(!wrap || wrap.kind !== _ENC_KIND){
+    alert('This file is not an OdTauLai encrypted backup. Use Restore (.json) for unencrypted backups.');
+    return;
+  }
+  const passphrase = prompt('Passphrase to decrypt this backup:');
+  if(!passphrase) return;
+  try{
+    const salt = _b64decode(wrap.kdf.salt);
+    const iv   = _b64decode(wrap.cipher.iv);
+    const ct   = _b64decode(wrap.ciphertext);
+    const key  = await _deriveBackupKey(passphrase, salt);
+    const pt   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    const json = new TextDecoder().decode(pt);
+    const payload = JSON.parse(json);
+    // Hand off to the existing restore logic via a synthetic File.
+    const f = new File([JSON.stringify(payload)], file.name.replace(/\.enc(\.json)?$/, '') + '-decrypted.json', { type: 'application/json' });
+    if(typeof importData === 'function') importData(f);
+  }catch(e){
+    alert('Decryption failed — wrong passphrase or corrupted file.');
+  }
+}
+window.exportDataEncrypted = exportDataEncrypted;
+window.importDataEncrypted = importDataEncrypted;
+
+// ── Export tasks-with-dates as iCal (.ics) — read-only feed for other apps ─
+// Mirrors the parser in calfeeds.js: VCALENDAR/VEVENT/DTSTART. All-day events
+// for date-only dueDates so Google/Apple Calendar render them correctly.
+function _icsEscape(s){
+  if(s == null) return '';
+  return String(s)
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;');
+}
+function _icsFoldLine(line){
+  // RFC 5545 §3.1: long lines should be folded at 75 octets with CRLF + space.
+  if(line.length <= 75) return line;
+  const parts = [];
+  let i = 0;
+  while(i < line.length){
+    parts.push((i === 0 ? '' : ' ') + line.slice(i, i + 75));
+    i += 75;
+  }
+  return parts.join('\r\n');
+}
+function exportTasksICS(){
+  if(!Array.isArray(tasks) || tasks.length === 0){
+    alert('No tasks to export');
+    return;
+  }
+  const dated = tasks.filter(t => t && t.dueDate && !t.archived);
+  if(!dated.length){
+    alert('No tasks with a due date — nothing to export');
+    return;
+  }
+  const stamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//OdTauLai//Tasks Export 1.0//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:OdTauLai Tasks',
+    'X-WR-TIMEZONE:UTC',
+  ];
+  for(const t of dated){
+    const dt = String(t.dueDate || '').replace(/-/g, '');
+    if(!/^\d{8}$/.test(dt)) continue;
+    const uid = 'odtaulai-task-' + t.id + '@odtaulai.local';
+    const summary = t.priority && t.priority !== 'none'
+      ? '[' + t.priority.toUpperCase() + '] ' + (t.name || 'Task')
+      : (t.name || 'Task');
+    const descParts = [];
+    if(t.description) descParts.push(t.description);
+    if(t.category) descParts.push('Life area: ' + t.category);
+    if(Array.isArray(t.tags) && t.tags.length) descParts.push('Tags: ' + t.tags.join(', '));
+    if(t.url) descParts.push('URL: ' + t.url);
+    lines.push('BEGIN:VEVENT');
+    lines.push(_icsFoldLine('UID:' + _icsEscape(uid)));
+    lines.push('DTSTAMP:' + stamp);
+    lines.push('DTSTART;VALUE=DATE:' + dt);
+    lines.push('SUMMARY:' + _icsFoldLine(_icsEscape(summary)));
+    if(descParts.length){
+      lines.push('DESCRIPTION:' + _icsFoldLine(_icsEscape(descParts.join('\n'))));
+    }
+    if(t.status === 'done') lines.push('STATUS:COMPLETED');
+    else if(t.status === 'progress') lines.push('STATUS:CONFIRMED');
+    else lines.push('STATUS:TENTATIVE');
+    lines.push('TRANSP:TRANSPARENT');
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const fname = 'odtaulai-tasks-' + todayKey() + '.ics';
+  a.download = fname;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  if(typeof showExportToast === 'function') showExportToast('Exported iCal — ' + fname);
+}
+window.exportTasksICS = exportTasksICS;
 
 // ── CSV parser (handles quoted fields with embedded commas/newlines/quotes) ─
 function _parseCSV(text){
