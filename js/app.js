@@ -2,16 +2,16 @@
 // Catches unhandled exceptions and promise rejections so they never vanish
 // silently.  Logs to console (no user-facing toast to avoid spam).
 window.onerror = function(msg, src, line, col, err) {
-  console.error('[ODTAULAI] Uncaught error:', msg, 'at', src, line + ':' + col, err);
+  console.error('[OdTauLai] Uncaught error:', msg, 'at', src, line + ':' + col, err);
   return false; // allow default browser handling too
 };
 window.addEventListener('unhandledrejection', function(e) {
-  console.error('[ODTAULAI] Unhandled promise rejection:', e.reason);
+  console.error('[OdTauLai] Unhandled promise rejection:', e.reason);
 });
 // Capture-phase listener for resource load failures (broken images, script 404s, etc.)
 window.addEventListener('error', function(e) {
   if (e.target && e.target !== window && e.target.tagName) {
-    console.warn('[ODTAULAI] Resource load error:', e.target.tagName, e.target.src || e.target.href || '');
+    console.warn('[OdTauLai] Resource load error:', e.target.tagName, e.target.src || e.target.href || '');
   }
 }, true);
 
@@ -203,7 +203,7 @@ function buildReport(format){
   if(goals.length){r+=h2('Goals')+'\n';doneGoals.forEach(g=>{r+=check(true)+g.text+(g.doneAt?' ('+g.doneAt+')':'')+'\n'});missedGoals.forEach(g=>{r+=check(false)+g.text+'\n'});r+='\n'}
   if(tasks.length){r+=h2('Time by Task')+'\n'+buildTaskTreeReport(bullet,null,0)+'\n'}
   if(timeLog.length){r+=h2('Session Log')+'\n';timeLog.slice().reverse().forEach(l=>{r+=bullet+l.time+' | '+(l.type==='work'?'FOCUS':l.type==='short'?'SHORT BREAK':l.type==='quick'?'QUICK':'LONG BREAK')+' | '+l.name+' | '+fmtShort(l.durSec)+'\n'});r+='\n'}
-  r+=hr+'\nGenerated at '+timeNow()+' by ODTAULAI\n';return r
+  r+=hr+'\nGenerated at '+timeNow()+' by OdTauLai\n';return r
 }
 function exportFile(format){
   // Daily report only supports txt/md now; csv is routed to the unified task CSV
@@ -239,6 +239,125 @@ setTimeout(() => {
       try { saveState('auto'); } catch(e) {}
     }
   } catch(e) {}
+})();
+
+// Quick-add launch: ?quickadd=1 → focus the task input + scroll into view + flash.
+// Used by the manifest "Quick Add" shortcut and by the OS-level widget surface.
+(function applyQuickAddLaunch(){
+  try{
+    const u = new URL(window.location.href);
+    if(u.searchParams.get('quickadd') !== '1') return;
+    activeTab = 'tasks';
+    const after = () => {
+      const inp = document.getElementById('taskInput');
+      if(!inp) return;
+      try{
+        if(typeof showTab === 'function') showTab('tasks');
+        inp.focus();
+        inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Brief visual flash so the user sees where focus landed.
+        inp.classList.add('quickadd-flash');
+        setTimeout(() => inp.classList.remove('quickadd-flash'), 1500);
+      }catch(_){}
+    };
+    if(document.readyState === 'complete') setTimeout(after, 200);
+    else window.addEventListener('DOMContentLoaded', () => setTimeout(after, 200));
+    u.searchParams.delete('quickadd');
+    history.replaceState(null, '', u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash);
+  }catch(_){}
+})();
+
+// G-21: Web Share Target — receives shares FROM other apps via the OS share sheet.
+// Manifest declares share_target.action=./?share=1 with method=GET, and the OS
+// appends share_title / share_text / share_url. We treat presence of ANY of
+// those as a share (some browsers may drop the literal `share=1` when merging),
+// then prefill the new-task input and show a banner so the user knows it landed.
+(function applyShareTarget(){
+  try{
+    const u = new URL(window.location.href);
+    const title = u.searchParams.get('share_title') || u.searchParams.get('title') || '';
+    const text  = u.searchParams.get('share_text')  || u.searchParams.get('text')  || '';
+    const url   = u.searchParams.get('share_url')   || u.searchParams.get('url')   || '';
+    const flag  = u.searchParams.get('share') === '1';
+    const parts = [title, text, url].filter(Boolean);
+    if(!parts.length && !flag) return;
+    activeTab = 'tasks';
+    const after = () => {
+      const inp = document.getElementById('taskInput');
+      if(!inp) return;
+      try{
+        if(typeof showTab === 'function') showTab('tasks');
+        inp.value = parts.join(' — ');
+        inp.focus();
+        try{ inp.setSelectionRange(inp.value.length, inp.value.length); }catch(_){}
+        inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        inp.classList.add('quickadd-flash');
+        setTimeout(() => inp.classList.remove('quickadd-flash'), 1500);
+        // Trigger the smart-add suggestion bar if present so the user can
+        // refine before submitting.
+        if(typeof maybeShowEnhanceBtn === 'function') maybeShowEnhanceBtn();
+      }catch(_){}
+      // Visible confirmation banner.
+      let banner = document.getElementById('shareInBanner');
+      if(!banner){
+        banner = document.createElement('div');
+        banner.id = 'shareInBanner';
+        banner.className = 'share-in-banner';
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
+        document.body.appendChild(banner);
+      }
+      banner.replaceChildren();
+      const lead = document.createElement('span');
+      lead.textContent = 'Imported from share — review then press Enter or “+ Add”.';
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.className = 'share-in-x';
+      dismiss.textContent = '✕';
+      dismiss.setAttribute('aria-label', 'Dismiss');
+      dismiss.onclick = () => banner.remove();
+      banner.append(lead, dismiss);
+      banner.style.display = '';
+      setTimeout(() => { if(banner.parentNode) banner.remove(); }, 8000);
+    };
+    if(document.readyState === 'complete') setTimeout(after, 200);
+    else window.addEventListener('DOMContentLoaded', () => setTimeout(after, 200));
+    ['share','share_title','share_text','share_url','title','text','url'].forEach(k => u.searchParams.delete(k));
+    history.replaceState(null, '', u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash);
+  }catch(_){}
+})();
+
+// G-22: File handlers — when launched via "Open with OdTauLai" the OS sends
+// a launchQueue entry with the file. We support .json (full backup / tasks)
+// and .ics (calendar feed paste).
+(function applyFileHandlers(){
+  if(!('launchQueue' in window) || !window.launchQueue || typeof window.launchQueue.setConsumer !== 'function') return;
+  try{
+    window.launchQueue.setConsumer(async (params) => {
+      if(!params || !params.files || !params.files.length) return;
+      for(const fh of params.files){
+        try{
+          const file = await fh.getFile();
+          const name = (file && file.name || '').toLowerCase();
+          const text = await file.text();
+          if(name.endsWith('.ics')){
+            // Paste-as-calendar: hand to addCalFeed if available
+            if(typeof addCalFeed === 'function'){
+              addCalFeed({ label: file.name.replace(/\.ics$/i,''), content: text, color: '#3d8bcc' });
+              if(typeof showExportToast === 'function') showExportToast('Calendar feed added: ' + file.name);
+            }
+          } else if(name.endsWith('.json')){
+            // Try as full backup first; fall back to tasks-only import.
+            if(typeof importData === 'function'){
+              try{ importData(file); }catch(_){
+                if(typeof importTasks === 'function') importTasks(file);
+              }
+            }
+          }
+        }catch(e){ console.warn('[file_handlers]', e); }
+      }
+    });
+  }catch(_){}
 })();
 setPhaseTime();
 if(typeof restoreTaskToolbarPrefs==='function') restoreTaskToolbarPrefs();
@@ -421,10 +540,10 @@ setTimeout(() => {
       }catch(e){ console.warn('[app] embed migration', e); }
     }
     if(typeof ensureCategoryCentroids === 'function'){
-      try{ await ensureCategoryCentroids(); }catch(e){}
+      try{ await ensureCategoryCentroids(); }catch(e){ console.warn('[app] category centroids', e); }
     }
     if(typeof ensureSchwartzEmbeddings === 'function'){
-      ensureSchwartzEmbeddings().catch(() => {});
+      ensureSchwartzEmbeddings().catch(e => console.warn('[app] schwartz embeddings', e));
     }
     if(typeof renderAIPanel === 'function') renderAIPanel();
     if(typeof maybeShowEnhanceBtn === 'function') maybeShowEnhanceBtn();

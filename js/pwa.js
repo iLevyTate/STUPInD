@@ -16,8 +16,8 @@
     document.getElementById('pwa-apple-icon').href = iconUrl;
     document.getElementById('pwa-favicon').href = iconUrl;
     const manifest = {
-      name: 'ODTAULAI — On device task app using local ambient intelligence',
-      short_name: 'ODTAULAI',
+      name: 'OdTauLai — On device task app using local ambient intelligence',
+      short_name: 'OdTauLai',
       description: 'Pomodoro + tasks with on-device semantic understanding of task meaning and context. Optional opt-in generative Ask mode runs fully on-device — no data leaves the browser.',
       start_url: location.pathname.split('/').slice(0,-1).join('/') + '/' + (location.pathname.split('/').pop() || ''),
       scope: location.pathname.split('/').slice(0,-1).join('/') + '/',
@@ -49,7 +49,7 @@
       // Fallback: inline SW via blob URL (cache name tracks js/version.js via ODTAULAI_RELEASE)
       const swBase = (typeof window !== 'undefined' && window.ODTAULAI_RELEASE && window.ODTAULAI_RELEASE.swCache)
         ? window.ODTAULAI_RELEASE.swCache
-        : 'odtaulai-v32';
+        : 'odtaulai-v34';
       const swCode = `
         const CACHE = '${swBase}-inline';
         self.addEventListener('install', e => self.skipWaiting());
@@ -154,7 +154,7 @@
       return;
     }
     if (_isIOS()) {
-      alert('Apple does not provide an “Install” API on iPhone/iPad (unlike Android).\n\nUse Safari:\n1. Tap Share (square with arrow).\n2. Tap “Add to Home Screen”.\n3. Tap Add — ODTAULAI opens fullscreen like an app.\n\nChrome on iOS uses the same WebKit engine; if Add to Home Screen is missing, try Safari.');
+      alert('Apple does not provide an “Install” API on iPhone/iPad (unlike Android).\n\nUse Safari:\n1. Tap Share (square with arrow).\n2. Tap “Add to Home Screen”.\n3. Tap Add — OdTauLai opens fullscreen like an app.\n\nChrome on iOS uses the same WebKit engine; if Add to Home Screen is missing, try Safari.');
       return;
     }
     if (/Android/i.test(navigator.userAgent || '')) {

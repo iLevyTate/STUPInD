@@ -1,0 +1,5 @@
+{
+  "greeting": "Quick add — opens the app focused on the task input.",
+  "launchUrl": "./?tab=tasks&quickadd=1",
+  "appUrl": "./"
+}

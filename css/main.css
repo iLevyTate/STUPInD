@@ -1193,6 +1193,17 @@
   .task-item:focus-within .task-row-secondary{display:flex}
   @media (hover:none){
     .task-item .task-row-secondary{display:flex}
+    /* On touch devices, list chip Edit (✎) and Remove (✕) icons stay visible
+       and meet a comfortable tap area — hover-only reveal is unreachable here */
+    .list-chip .lc-edit,
+    .list-chip .lc-rm{
+      opacity:.7;font-size:13px;
+      min-width:32px;min-height:32px;padding:0 6px;
+      display:inline-flex;align-items:center;justify-content:center;
+      border-radius:6px;
+    }
+    .list-chip .lc-edit:active,
+    .list-chip .lc-rm:active{opacity:1;background:var(--bg-3)}
   }
   .task-row-secondary:empty{display:none}
   .task-row-secondary .status-badge{font-size:10px;padding:2px 8px;min-height:auto}
@@ -1449,9 +1460,10 @@
     .nav-tabs{padding:2px;gap:0;margin-right:6px}
     .nav-tab{padding:6px 2px;min-height:44px;font-size:9px}
     .nav-tab-icon{font-size:15px;margin-bottom:1px}
-    #themeToggleBtn{width:36px!important;height:36px!important;min-width:36px;font-size:14px}
+    /* Touch targets: WCAG 2.1 AAA recommends ≥44px for header icon buttons */
+    #themeToggleBtn{width:44px!important;height:44px!important;min-width:44px;font-size:15px}
     #cmdKBtn.header-icon-btn--cmdk{width:auto!important;height:auto!important;min-width:56px!important;min-height:44px!important;padding:0 10px!important;font-size:12px!important}
-    .ai-chip{height:36px;min-width:36px;padding:0 6px}
+    .ai-chip{height:44px;min-width:44px;padding:0 8px}
     .ai-chip-label{font-size:9px}
 
     /* === SMART VIEWS: force horizontal scroll, no clipping === */
@@ -1472,7 +1484,8 @@
     /* === LISTS BAR: horizontal scroll === */
     .lists-bar{overflow-x:auto;flex-wrap:nowrap!important;scrollbar-width:none;gap:4px;padding:6px}
     .lists-bar::-webkit-scrollbar{display:none}
-    .list-chip,.list-add{flex-shrink:0;padding:6px 10px;min-height:36px;font-size:12px}
+    /* Touch target: 44px min so list chips comfortably tap on mobile */
+    .list-chip,.list-add{flex-shrink:0;padding:10px 12px;min-height:44px;font-size:13px}
 
     /* === TOOLBAR: collapsed into search + 2 compact rows === */
     .task-toolbar{padding:6px;gap:5px!important}
@@ -1494,8 +1507,9 @@
     .task-row-primary .task-checkbox{width:24px;height:24px;min-width:24px}
     .task-sig{font-size:10px;padding:2px 7px;font-weight:500}
     .task-signals{gap:4px;flex-wrap:wrap}
-    .task-row-actions{opacity:.6;gap:2px}
-    .ta-btn{width:34px;height:34px;font-size:14px}
+    .task-row-actions{opacity:.6;gap:4px}
+    /* Bumped from 34→40 — compromise between Apple HIG 44pt and density of multiple per-task actions */
+    .ta-btn{width:40px;height:40px;font-size:14px}
     .task-row-secondary{padding:0 12px 8px 48px;gap:6px;font-size:10px}
     .task-tags-inline .tag-chip{font-size:10px;padding:1px 6px;max-width:100px;overflow:hidden;text-overflow:ellipsis}
 
@@ -1508,7 +1522,7 @@
     .ctrls{margin-top:4px}
     .ctrls .btn{min-height:44px;padding:10px 28px;font-size:14px;font-weight:600}
     .tabs{padding:3px;gap:2px;background:var(--bg-2)}
-    .tab{padding:9px 6px;font-size:11px;min-height:40px;color:var(--text-2)}
+    .tab{padding:11px 6px;font-size:11px;min-height:44px;color:var(--text-2)}
     .tab:not(.active){opacity:.75}
     .phase-nav-hint{font-size:10px;padding:4px 8px;line-height:1.4;opacity:.7}
 
@@ -1606,6 +1620,53 @@
     .today-banner{padding:8px 4px}
     .board-col{min-width:85vw!important;width:85vw!important}
     .qt-preset{flex-basis:calc(25% - 5px);font-size:11px;padding:6px 6px}
+    /* Calendar day cells stay comfortably tappable on small phones */
+    .cal-day{min-height:60px;padding:3px}
+    .cal-task{font-size:10px;padding:2px 4px}
+  }
+
+  /* === Smallest phones (≤320px iPhone SE / older Android): widen board to near-full-bleed === */
+  @media (max-width:320px){
+    .board-col{min-width:88vw!important;width:88vw!important;max-width:88vw!important}
+    .header h1{font-size:15px}
+  }
+
+  /* === Classification editor (Settings → Classifications): stack form controls vertically on mobile === */
+  @media (max-width:640px){
+    .class-mgr-row{flex-direction:column;align-items:stretch;gap:8px}
+    .class-mgr-row > *{width:100%}
+    .class-mgr-sel,.class-mgr-sel-color,.class-mgr-in{max-width:100%}
+    .class-mgr-btn{min-height:40px;padding:8px 12px;font-size:13px}
+  }
+
+  /* === Native form controls: keep date/time/datetime pickers inside their containers ===
+     Android Chrome's native picker is wider than the input by default, which can
+     overflow narrow modals. iOS Safari is fine but constraining is a no-op there. */
+  input[type="date"],input[type="time"],input[type="datetime-local"]{
+    max-width:100%;box-sizing:border-box;
+  }
+
+  /* === Landscape phones / short viewports: reclaim vertical space ===
+     Triggers on phones rotated to landscape (≈667×375) and on the iPhone SE
+     in landscape (568×320). Goal: keep primary actions reachable without scrolling. */
+  @media (orientation:landscape) and (max-height:500px){
+    /* Pomodoro ring shrinks so controls + tabs stay above the fold */
+    .ring-wrap,.ring-svg{width:140px!important;height:140px!important}
+    .ring-time{font-size:30px!important;letter-spacing:1px}
+    .ring-label{font-size:9px!important}
+    .card{padding:12px;gap:10px}
+    .ctrls{margin-top:2px}
+    /* Nav and headers shrink */
+    .nav-tab{min-height:38px!important;padding:4px 2px!important}
+    .header{margin-bottom:6px!important}
+    .header h1{font-size:14px}
+    /* Modals: don't reserve 100px of bottom padding when there's barely 500px of height */
+    .modal{max-height:96vh!important}
+    .modal-body{padding-bottom:calc(60px + env(safe-area-inset-bottom,0px))!important}
+    /* Today banner stays one short row */
+    .today-banner{padding:6px 8px!important;gap:4px!important}
+    .tb-num{font-size:16px!important}
+    .tb-lbl{font-size:9px!important}
   }
 
   /* ================================================================= */
@@ -2385,7 +2446,8 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
 .swipe-tip-dismiss{font-size:11px;padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff;border:none}
 .cmdk-foot{font-size:11px;color:var(--text-4);padding:8px 12px;border-top:1px solid var(--border)}
 .export-toast{
-  position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(16px);z-index:9000;
+  /* bottom respects iOS home indicator / Android nav bar via safe-area-inset */
+  position:fixed;bottom:calc(28px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(16px);z-index:9000;
   padding:10px 18px;border-radius:10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);
   font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;max-width:min(90vw,420px);text-align:center;
 }
@@ -2594,3 +2656,109 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
 .app-dlg-msg{color:var(--text-1)}
 .app-dlg-overlay{z-index:1100}
 
+
+/* ───── G-17 stats-by-life-area ───── */
+.stats-by-area{margin-top:12px;padding:10px 12px;background:var(--card-2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:var(--r-sm,6px)}
+.sba-title{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px}
+.sba-row{display:grid;grid-template-columns:14px 1fr 100px 90px;align-items:center;gap:8px;padding:3px 0;font-size:12px}
+.sba-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.sba-lbl{color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sba-bar{position:relative;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.sba-bar-fill{display:block;height:100%;border-radius:3px}
+.sba-val{color:var(--text-3);font-variant-numeric:tabular-nums;text-align:right;font-size:11px}
+
+/* ───── G-14 focus streaks + heatmap ───── */
+.focus-streak{margin-top:12px;padding:12px;background:var(--card-2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:var(--r-sm,6px)}
+.streak-row{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+.streak-num{font-size:28px;font-weight:700;color:var(--accent,#48b5e0);line-height:1;font-variant-numeric:tabular-nums}
+.streak-lbl{font-size:12px;color:var(--text-2)}
+.streak-best{margin-left:auto;font-size:11px;color:var(--text-3)}
+.hm-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;max-width:240px}
+.hm-cell{display:block;aspect-ratio:1;border-radius:2px;background:var(--border)}
+.hm-l1{background:rgba(72,181,224,.25)}
+.hm-l2{background:rgba(72,181,224,.5)}
+.hm-l3{background:rgba(72,181,224,.75)}
+.hm-l4{background:rgba(72,181,224,1)}
+
+/* ───── G-15 session note prompt ───── */
+.session-note-prompt{margin-top:12px;padding:12px;background:var(--card-2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:var(--r-sm,6px);display:flex;flex-direction:column;gap:8px}
+.snp-lbl{font-size:12px;color:var(--text-2)}
+.snp-input{font:inherit;color:var(--text-1);background:var(--input-bg,rgba(0,0,0,.2));border:1px solid var(--border);border-radius:4px;padding:6px 8px;resize:vertical;min-height:40px}
+.snp-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.snp-save{background:var(--accent,#48b5e0);color:#0a1320;border:none;padding:6px 12px;border-radius:4px;font:600 12px inherit;cursor:pointer}
+.snp-skip{background:transparent;color:var(--text-2);border:1px solid var(--border);padding:6px 12px;border-radius:4px;font:12px inherit;cursor:pointer}
+.snp-off{margin-left:auto;font-size:11px;color:var(--text-3);display:inline-flex;align-items:center;gap:4px}
+
+/* ───── G-7 focus-on-list mode ───── */
+.app-focus-list .smart-views,
+.app-focus-list .lists-bar,
+.app-focus-list .today-banner{display:none !important}
+.app-focus-list .nav-tabs::after{content:"focus-list";position:absolute;right:12px;font-size:10px;color:var(--text-3);letter-spacing:.08em;text-transform:uppercase}
+
+/* ───── G-18 today-view calendar events ───── */
+.today-cal-events{margin:8px 0 4px;padding:8px 10px;background:var(--card-2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:var(--r-sm,6px)}
+.tce-head{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
+.tce-list{display:flex;flex-direction:column;gap:4px}
+.tce-row{display:grid;grid-template-columns:8px 60px 1fr auto;align-items:center;gap:8px;font-size:12px}
+.tce-dot{width:8px;height:8px;border-radius:50%}
+.tce-time{color:var(--text-2);font-variant-numeric:tabular-nums;font-size:11px}
+.tce-title{color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tce-feed{color:var(--text-3);font-size:10px}
+
+/* ───── G-4 bulk-select edit mode ───── */
+.app-bulk-mode .task-item{cursor:pointer}
+.app-bulk-mode .task-item::before{content:"";display:inline-block;width:14px;height:14px;border:1.5px solid var(--border);border-radius:3px;margin-right:8px;flex-shrink:0;background:var(--card-2,rgba(255,255,255,.05));vertical-align:middle}
+.app-bulk-mode .task-item.task-bulk-selected{background:rgba(72,181,224,.08);border-color:rgba(72,181,224,.4)}
+.app-bulk-mode .task-item.task-bulk-selected::before{background:var(--accent,#48b5e0);border-color:var(--accent,#48b5e0);box-shadow:inset 0 0 0 2px var(--card-2,#0a1320)}
+.bulk-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1200;display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--card-1,#1a2333);border:1px solid var(--border);border-radius:999px;box-shadow:0 4px 18px rgba(0,0,0,.4);max-width:calc(100vw - 32px);flex-wrap:wrap}
+.bulk-count{font-size:12px;color:var(--accent,#48b5e0);font-weight:600;margin-right:6px}
+.bulk-btn{background:transparent;color:var(--text-1);border:1px solid var(--border);padding:5px 10px;border-radius:14px;font:600 11px inherit;cursor:pointer}
+.bulk-btn:hover{background:var(--card-2,rgba(255,255,255,.05))}
+.bulk-close{background:transparent;border-color:transparent;font-size:14px;color:var(--text-3)}
+.bulk-sel{background:var(--card-2,rgba(255,255,255,.05));color:var(--text-1);border:1px solid var(--border);padding:4px 8px;border-radius:14px;font:11px inherit}
+
+/* ───── G-10/G-11 brief / review card ───── */
+.ai-brief-card{position:fixed;right:16px;top:80px;z-index:1100;width:min(420px,calc(100vw - 32px));max-height:60vh;overflow:auto;background:var(--card-1,#1a2333);border:1px solid var(--border);border-radius:var(--r-md,8px);box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.aibc-head{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
+.aibc-title{flex:1;font-size:13px;font-weight:600;color:var(--text-1)}
+.aibc-close{background:transparent;border:none;color:var(--text-3);font-size:14px;cursor:pointer;padding:0 4px}
+.aibc-body{padding:14px;font-size:13px;line-height:1.55;color:var(--text-1);white-space:pre-wrap}
+
+/* ───── G-25 prefers-contrast: more (high-contrast accessibility theme) ───── */
+@media (prefers-contrast: more) {
+  :root {
+    --border: rgba(255,255,255,.55);
+    --text-3: #c8d3e0;
+  }
+  .task-item, .ai-brief-card, .session-note-prompt, .focus-streak, .stats-by-area, .today-cal-events, .bulk-bar { border-width:1.5px }
+  .task-checkbox, .qt-btn, .bulk-btn, .snp-save, .snp-skip, .export-btn { outline:1px solid currentColor; outline-offset:1px }
+  :focus-visible { outline:2px solid currentColor; outline-offset:2px }
+  .sba-bar { background:#222 }
+}
+
+/* ───── G-12 voice button styling ───── */
+.task-voice-btn{position:absolute;right:80px}
+.task-voice-btn.on{color:#e74c3c;animation:pulseVoice 1.2s ease-in-out infinite}
+@keyframes pulseVoice{0%,100%{opacity:1}50%{opacity:.55}}
+@media (prefers-reduced-motion: reduce){
+  .task-voice-btn.on{animation:none}
+}
+
+/* ───── G-7 visible focus-on-list toggle in the lists bar ───── */
+.list-focus-toggle{background:transparent;color:var(--text-3);border:1px solid var(--border);padding:4px 10px;border-radius:14px;font:11px inherit;cursor:pointer;margin-left:6px}
+.list-focus-toggle.on{background:rgba(72,181,224,.12);color:var(--accent,#48b5e0);border-color:rgba(72,181,224,.4)}
+.list-focus-toggle:hover{background:var(--card-2,rgba(255,255,255,.05))}
+
+/* ───── G-21 share-target: incoming-share confirmation + input flash ───── */
+.quickadd-flash{animation:quickaddFlash 1.4s ease-out;outline:2px solid var(--accent,#48b5e0);outline-offset:2px}
+@keyframes quickaddFlash{
+  0%{box-shadow:0 0 0 0 rgba(72,181,224,.7)}
+  70%{box-shadow:0 0 0 12px rgba(72,181,224,0)}
+  100%{box-shadow:0 0 0 0 rgba(72,181,224,0)}
+}
+@media (prefers-reduced-motion: reduce){
+  .quickadd-flash{animation:none}
+}
+.share-in-banner{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1300;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(72,181,224,.12);color:var(--accent,#48b5e0);border:1px solid rgba(72,181,224,.4);border-radius:999px;font-size:12px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.4);max-width:calc(100vw - 32px)}
+.share-in-x{background:transparent;border:none;color:inherit;font-size:14px;cursor:pointer;padding:0 4px;opacity:.7}
+.share-in-x:hover{opacity:1}

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>ODTAULAI · Personal Task Manager</title>
+<title>OdTauLai · Personal Task Manager</title>
 
 <!-- PWA meta -->
 <meta name="color-scheme" content="dark light">
@@ -11,8 +11,8 @@
 <meta name="description" content="Pomodoro deep-work timer and ClickUp-style task manager that uses on-device local embeddings to intelligently route your tasks, track your time, and ensure value alignment, all without your data ever leaving your machine.">
 <!-- Link preview (Open Graph / Twitter) — og:image must be absolute; change base if Pages URL or domain differs -->
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="ODTAULAI">
-<meta property="og:title" content="ODTAULAI · Personal Task Manager">
+<meta property="og:site_name" content="OdTauLai">
+<meta property="og:title" content="OdTauLai · Personal Task Manager">
 <meta property="og:description" content="Pomodoro deep-work timer and ClickUp-style task manager that uses on-device local embeddings to intelligently route your tasks, track your time, and ensure value alignment, all without your data ever leaving your machine.">
 <meta property="og:url" content="https://ilevytate.github.io/ODTAULAI/">
 <meta property="og:image" content="https://ilevytate.github.io/ODTAULAI/icons/icon-512.png">
@@ -20,14 +20,14 @@
 <meta property="og:image:width" content="512">
 <meta property="og:image:height" content="512">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ODTAULAI · Personal Task Manager">
+<meta name="twitter:title" content="OdTauLai · Personal Task Manager">
 <meta name="twitter:description" content="Pomodoro deep-work timer and ClickUp-style task manager that uses on-device local embeddings to intelligently route your tasks, track your time, and ensure value alignment, all without your data ever leaving your machine.">
 <meta name="twitter:image" content="https://ilevytate.github.io/ODTAULAI/icons/icon-512.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ODTAULAI">
+<meta name="apple-mobile-web-app-title" content="OdTauLai">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="application-name" content="ODTAULAI">
+<meta name="application-name" content="OdTauLai">
 <!-- CSP: script-src / object-src / base-uri are the hard security boundaries.
      connect-src uses http:/https: broadly because calfeeds.js allows user-configured CORS proxy URLs.
      wss: entries are required for PeerJS WebRTC signalling. -->
@@ -85,7 +85,7 @@
         <path d="M 119.2 177 A 158 158 0 1 1 177 392.8" fill="none" stroke="url(#hdrMark)" stroke-width="22" stroke-linecap="round"/>
         <path d="M 168 268 L 228 328 L 352 184" fill="none" stroke="url(#hdrMark)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" filter="url(#hdrGlow)"/>
       </svg>
-      ODTAULAI
+      OdTauLai
     </h1>
     <div class="header-mid">
       <div class="header-date" id="headerDate"></div>
@@ -158,6 +158,7 @@
           onkeydown="if(event.key==='Enter'){if(window._smartAddPreview){applySmartAddAndSubmit()}else{addTask()}}">
         <button class="task-enhance-btn" id="taskEnhanceBtn" onclick="smartAddEnhance()" style="display:none" title="Suggest metadata from your task history (embeddings)" data-icon="sparkles" aria-label="Smart-add suggestions"></button>
         <button class="task-enhance-btn task-enhance-btn--llm" id="taskParseBtn" onclick="smartAddParseWithLLM()" style="display:none" title="Parse this freeform sentence with the on-device LLM" data-icon="wand" aria-label="Parse with LLM"></button>
+        <button class="task-enhance-btn task-voice-btn" id="taskVoiceBtn" onclick="toggleVoiceInput()" style="display:none" title="Voice input (on-device speech recognition)" data-icon="phone" aria-label="Voice input"></button>
       </div>
       <button class="task-add" onclick="if(window._smartAddPreview){applySmartAddAndSubmit()}else{addTask()}">+ Add</button>
     </div>
@@ -185,12 +186,16 @@
     <!-- Smart views only — lightweight navigation -->
     <div class="smart-views" id="smartViews">
       <button class="sv-chip active" data-view="all" onclick="setSmartView('all')"><span class="sv-icon" data-icon="list"></span>All<span class="sv-count" id="svcAll">0</span></button>
+      <button class="sv-chip" data-view="inbox" onclick="setSmartView('inbox')" title="Untriaged — no list, no category, no due date, no tags"><span class="sv-icon" data-icon="inbox"></span>Inbox<span class="sv-count" id="svcInbox">0</span></button>
       <button class="sv-chip" data-view="today" onclick="setSmartView('today')"><span class="sv-icon" data-icon="calendar"></span>Today<span class="sv-count" id="svcToday">0</span></button>
       <button class="sv-chip" data-view="week" onclick="setSmartView('week')"><span class="sv-icon" data-icon="calendarWeek"></span>Week<span class="sv-count" id="svcWeek">0</span></button>
       <button class="sv-chip" data-view="overdue" onclick="setSmartView('overdue')"><span class="sv-icon" data-icon="alertTriangle"></span>Overdue<span class="sv-count" id="svcOverdue">0</span></button>
       <button class="sv-chip" data-view="unscheduled" onclick="setSmartView('unscheduled')"><span class="sv-icon" data-icon="circleDashed"></span>Unscheduled<span class="sv-count" id="svcUnscheduled">0</span></button>
       <button class="sv-chip" data-view="starred" onclick="setSmartView('starred')"><span class="sv-icon" data-icon="star"></span>Starred<span class="sv-count" id="svcStarred">0</span></button>
       <button class="sv-chip" data-view="impact" onclick="setSmartView('impact')" title="Top ~20% by leverage — derived from priority, due, effort, unblocks, values, star"><span class="sv-icon" data-icon="zap"></span>Impact<span class="sv-count" id="svcImpact">0</span></button>
+      <button class="sv-chip" data-view="waiting" onclick="setSmartView('waiting')" title="Tasks blocked on someone else (type = waiting)"><span class="sv-icon" data-icon="hourglass"></span>Waiting<span class="sv-count" id="svcWaiting">0</span></button>
+      <button class="sv-chip" data-view="stuck" onclick="setSmartView('stuck')" title="Open tasks untouched for 14+ days"><span class="sv-icon" data-icon="alertCircle"></span>Stuck<span class="sv-count" id="svcStuck">0</span></button>
+      <button class="sv-chip" data-view="snoozed" onclick="setSmartView('snoozed')" title="Tasks hidden until a date (snoozed)"><span class="sv-icon" data-icon="moon"></span>Snoozed<span class="sv-count" id="svcSnoozed">0</span></button>
       <button class="sv-chip" data-view="habits" onclick="setSmartView('habits')" title="Recurring &amp; habits"><span class="sv-icon" data-icon="refresh"></span>Habits<span class="sv-count" id="svcHabits">0</span></button>
       <button class="sv-chip" data-view="completed" onclick="setSmartView('completed')"><span class="sv-icon" data-icon="checkCircle"></span>Done<span class="sv-count" id="svcCompleted">0</span></button>
       <button class="sv-chip" data-view="archived" onclick="setSmartView('archived')"><span class="sv-icon" data-icon="archive"></span>Archive<span class="sv-count" id="svcArchived">0</span></button>
@@ -277,6 +282,9 @@
 
     <!-- Lists bar: only if multiple lists exist -->
     <div class="lists-bar" id="listsBar"></div>
+
+    <!-- G-18: Calendar events for Today view (rendered conditionally) -->
+    <div class="today-cal-events" id="todayCalEvents" style="display:none"></div>
 
     <!-- Today banner: hidden when empty, compact when shown -->
     <div class="today-banner today-banner-compact" id="todayBanner" style="display:none">
@@ -392,6 +400,7 @@
       <div style="flex:1 1 100px"><label class="fl">Label</label><input class="fi fi-w" id="intLabel" placeholder="e.g. Posture check"></div>
       <div style="display:flex;gap:6px;align-items:flex-end"><div><label class="fl">Min</label><input type="number" class="fi fi-n" id="intMin" value="5" min="0" max="999"></div><div><label class="fl">Sec</label><input type="number" class="fi fi-n" id="intSec" value="0" min="0" max="59"></div></div>
       <div><label class="fl">Sound</label><select class="fi fi-s" id="intChime"><option value="bell">Bell</option><option value="ping">Ping</option><option value="buzz">Buzz</option><option value="chord">Chord</option><option value="alarm">Alarm</option></select></div>
+      <div><label class="fl">During</label><select class="fi fi-s" id="intTarget"><option value="pomo">Pomodoro</option><option value="quick">Quick Timers</option><option value="sw">Stopwatch</option></select></div>
       <div style="display:flex;gap:5px"><button type="button" class="iprev" onclick="playChime(gid('intChime').value)" title="Preview" data-icon="play"></button><button class="iadd" onclick="addInterval()">+ ADD</button></div>
     </div>
     <div class="ilist" id="intList"><div class="iempty" id="intEmpty">No chimes set</div></div>
@@ -415,10 +424,20 @@
       <details class="set-section" open>
         <summary class="set-section-sum">General</summary>
         <div class="set-section-body">
+          <div class="srow"><span class="sr-lbl">Preset</span>
+            <select class="sinput" id="cfgPreset" onchange="applyPhasePreset(this.value)" title="Switch to a named cadence; manually editing the durations below clears the preset">
+              <option value="classic">Classic 25/5</option>
+              <option value="short">Short 15/3</option>
+              <option value="longfocus">Long focus 52/17</option>
+              <option value="ultradian">Ultradian 90/20</option>
+              <option value="deepwork">Deep work 120/30</option>
+            </select>
+          </div>
           <div class="srow"><span class="sr-lbl">Focus Duration</span><input type="number" class="sinput" id="cfgWork" value="25" min="1" max="120" onchange="updateConfig()"><span class="sunit">min</span></div>
           <div class="srow"><span class="sr-lbl">Short Break</span><input type="number" class="sinput" id="cfgShort" value="5" min="1" max="30" onchange="updateConfig()"><span class="sunit">min</span></div>
           <div class="srow"><span class="sr-lbl">Long Break</span><input type="number" class="sinput" id="cfgLong" value="15" min="1" max="60" onchange="updateConfig()"><span class="sunit">min</span></div>
           <div class="srow"><span class="sr-lbl">Sessions / Cycle</span><input type="number" class="sinput" id="cfgCycle" value="4" min="2" max="10" onchange="updateConfig()"></div>
+          <div class="srow"><span class="sr-lbl">Ask for session note</span><div class="toggle on" id="togSnpNote" role="switch" aria-checked="true" tabindex="0" onclick="toggleOpt('togSnpNote')"><div class="tknob"></div></div></div>
           <div class="srow"><span class="sr-lbl">Auto-start Breaks</span><div class="toggle on" id="togBreak" role="switch" aria-checked="true" tabindex="0" onclick="toggleOpt('togBreak')"><div class="tknob"></div></div></div>
           <div class="srow"><span class="sr-lbl">Auto-start Focus</span><div class="toggle" id="togWork" role="switch" aria-checked="false" tabindex="0" onclick="toggleOpt('togWork')"><div class="tknob"></div></div></div>
           <div class="srow"><span class="sr-lbl">Sound Alerts</span><div class="toggle on" id="togSound" role="switch" aria-checked="true" tabindex="0" onclick="toggleOpt('togSound')"><div class="tknob"></div></div></div>
@@ -493,6 +512,8 @@
       <div class="stat-box"><div class="stat-val bc" id="statBreaks">0</div><div class="stat-lbl">Breaks</div></div>
     </div>
     <div class="history" id="historyBlocks"></div>
+    <div class="stats-by-area" id="statsByArea" style="display:none"></div>
+    <div class="focus-streak" id="focusStreak" style="display:none"></div>
 
     <!-- ═══ DAILY REPORT — human-readable summary of today's activity ═══ -->
     <div class="export-section">
@@ -512,6 +533,7 @@
       <div class="export-row">
         <button class="export-btn export-csv" onclick="exportTasksCSV()">⬇ Tasks (.csv)</button>
         <button class="export-btn" style="background:rgba(61,139,204,.1);border-color:rgba(61,139,204,.3);color:#3d8bcc" onclick="exportTasksJSON()">⬇ Tasks (.json)</button>
+        <button class="export-btn" style="background:rgba(155,89,182,.1);border-color:rgba(155,89,182,.3);color:#9b59b6" onclick="exportTasksICS()" title="Read-only feed of tasks-with-due-dates for Google/Apple Calendar etc.">⬇ Tasks (.ics)</button>
         <label class="export-btn" style="cursor:pointer;background:rgba(46,204,113,.08);border-color:rgba(46,204,113,.25);color:#2ecc71">
           ⬆ Import tasks
           <input type="file" accept=".json,.csv" style="display:none" onchange="importTasks(this.files[0]); this.value=''">
@@ -528,6 +550,13 @@
         <label class="export-btn" style="cursor:pointer;background:rgba(61,139,204,.1);border-color:rgba(61,139,204,.3);color:#3d8bcc">
           ⬆ Restore backup
           <input type="file" accept=".json" style="display:none" onchange="importData(this.files[0]); this.value=''">
+        </label>
+      </div>
+      <div class="export-row" style="margin-top:8px">
+        <button class="export-btn" style="background:rgba(155,89,182,.12);border-color:rgba(155,89,182,.3);color:#9b59b6" onclick="exportDataEncrypted()" title="Encrypts the same backup with a passphrase (PBKDF2 + AES-GCM, in-browser only)">⬇ Encrypted backup (.json)</button>
+        <label class="export-btn" style="cursor:pointer;background:rgba(155,89,182,.08);border-color:rgba(155,89,182,.25);color:#9b59b6">
+          ⬆ Restore encrypted
+          <input type="file" accept=".json" style="display:none" onchange="importDataEncrypted(this.files[0]); this.value=''">
         </label>
       </div>
     </div>
@@ -555,7 +584,7 @@
     <div class="mt-label" id="mtLabel">FOCUS</div>
     <div class="mt-time" id="mtTime">25:00</div>
   </div>
-  <button class="mt-btn mt-play" id="mtToggle" onclick="event.stopPropagation();miniTimerToggle()">▶</button>
+  <button class="mt-btn mt-play" id="mtToggle" aria-label="Play or pause focus timer" onclick="event.stopPropagation();miniTimerToggle()">▶</button>
   <div class="mt-open" id="mtTaskHint" style="display:none">⇢ open</div>
 </div>
 
@@ -692,6 +721,23 @@
             <button type="button" class="qd-btn" onclick="setQuickReminder('due',9)">Due 9am</button>
             <button type="button" class="qd-btn" onclick="setQuickReminder('clear')">Clear</button>
           </div>
+        </div>
+      </div>
+
+      <div class="mfield-row">
+        <div class="mfield">
+          <div class="mfield-lbl">Snooze (hide until)</div>
+          <input type="date" class="mfield-in" id="mdSnoozeUntil" title="Hide this task from main views until this date. Distinct from due date — snoozing does not move the deadline.">
+          <div class="quick-dates">
+            <button type="button" class="qd-btn" onclick="setQuickSnooze(1)">+1 day</button>
+            <button type="button" class="qd-btn" onclick="setQuickSnooze(3)">+3 days</button>
+            <button type="button" class="qd-btn" onclick="setQuickSnooze(7)">+1 week</button>
+            <button type="button" class="qd-btn" onclick="setQuickSnooze('clear')">Clear</button>
+          </div>
+        </div>
+        <div class="mfield">
+          <div class="mfield-lbl">Type</div>
+          <div class="mfield-chips" id="mdTypeChips"></div>
         </div>
       </div>
 

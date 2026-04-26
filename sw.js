@@ -1,5 +1,5 @@
-// ODTAULAI Service Worker — keep CACHE_NAME aligned with js/version.js swCache
-const CACHE_NAME = 'odtaulai-v32';
+// OdTauLai Service Worker — keep CACHE_NAME aligned with js/version.js swCache
+const CACHE_NAME = 'odtaulai-v34';
 
 const ASSETS = [
   './',
@@ -35,6 +35,8 @@ const ASSETS = [
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
   './icons/icon-small.svg',
+  './widgets/quickadd-template.json',
+  './widgets/quickadd-data.json',
 ];
 
 self.addEventListener('install', e => {

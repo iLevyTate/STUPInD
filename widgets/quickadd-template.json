@@ -1,0 +1,39 @@
+{
+  "type": "AdaptiveCard",
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "size": "Medium",
+      "weight": "Bolder",
+      "text": "OdTauLai"
+    },
+    {
+      "type": "TextBlock",
+      "spacing": "None",
+      "size": "Small",
+      "isSubtle": true,
+      "text": "${greeting}",
+      "wrap": true
+    },
+    {
+      "type": "Input.Text",
+      "id": "taskName",
+      "label": "Add a task",
+      "placeholder": "Buy milk tomorrow @urgent #shopping !star"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Add task",
+      "url": "${launchUrl}"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open app",
+      "url": "${appUrl}"
+    }
+  ]
+}

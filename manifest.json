@@ -1,6 +1,6 @@
 {
-  "name": "ODTAULAI — On device task app using local ambient intelligence",
-  "short_name": "ODTAULAI",
+  "name": "OdTauLai — On device task app using local ambient intelligence",
+  "short_name": "OdTauLai",
   "id": "./",
   "description": "On-device Pomodoro timer + task manager. A small local embedding model (~33 MB) captures the meaning and context of your tasks — not just keywords — for semantic search, smart suggestions, duplicates, list routing, and values alignment. Optional on-device generative \"Ask\" mode (opt-in, no data leaves the browser). Works offline. Optional P2P sync. No account, no tracking.",
   "start_url": "./",
@@ -21,9 +21,9 @@
   ],
   "shortcuts": [
     {
-      "name": "New Task", "short_name": "Task",
-      "description": "Jump straight to adding a task",
-      "url": "./?tab=tasks",
+      "name": "Quick Add Task", "short_name": "Quick Add",
+      "description": "Jump straight to a focused task input",
+      "url": "./?tab=tasks&quickadd=1",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     },
     {
@@ -31,6 +31,40 @@
       "description": "Open the Pomodoro timer",
       "url": "./?tab=focus",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "share_target": {
+    "action": "./?share=1",
+    "method": "GET",
+    "params": {
+      "title": "share_title",
+      "text":  "share_text",
+      "url":   "share_url"
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "./?openfile=1",
+      "accept": {
+        "application/json": [".json"],
+        "text/calendar":    [".ics"]
+      }
+    }
+  ],
+  "widgets": [
+    {
+      "name": "Quick Add Task",
+      "short_name": "Quick Add",
+      "description": "Add a task from the OS widget surface — opens straight into a focused input.",
+      "tag": "quickadd",
+      "template": "quickadd",
+      "ms_ac_template": "widgets/quickadd-template.json",
+      "data": "widgets/quickadd-data.json",
+      "type": "application/json",
+      "screenshots": [{ "src": "icons/icon-512.png", "sizes": "512x512", "label": "Quick Add" }],
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }],
+      "auth": false,
+      "update": 86400
     }
   ]
 }
