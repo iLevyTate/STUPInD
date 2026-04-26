@@ -1,6 +1,6 @@
 # Deployment Guide
 
-ODTAULAI is a static PWA — no build step, no server-side code, no API. You just need to host the files.
+OdTauLai is a static PWA — no build step, no server-side code, no API. You just need to host the files.
 
 ## Web app manifest `id`
 
@@ -31,7 +31,7 @@ Changing `id` later can make existing installs look like a separate app until ol
 ## Option 3: Vercel (free, fast)
 
 ```bash
-cd /path/to/ODTAULAI
+cd /path/to/OdTauLai
 npx vercel
 ```
 
@@ -90,7 +90,7 @@ server {
 ## Option 6: Python one-liner (LAN / local test)
 
 ```bash
-cd /path/to/ODTAULAI
+cd /path/to/OdTauLai
 python3 -m http.server 8080
 # Open http://YOUR-LAN-IP:8080 from your phone (same Wi-Fi)
 ```
@@ -111,14 +111,14 @@ caddy file-server --domain odtaulai.example.com --root .
 
 After deploying, visit the site and open DevTools (desktop) or Safari Web Inspector (iOS):
 
-- **Chrome DevTools:** Application tab → Manifest → should show "ODTAULAI" with icons
+- **Chrome DevTools:** Application tab → Manifest → should show "OdTauLai" with icons
 - **Application tab → Service Workers:** should show `sw.js` registered and running
 - **Lighthouse:** Run PWA audit — should score 100%
 
 ### Expected behavior
 
 1. Visit site → browser shows install icon in address bar (desktop) or "Add to Home Screen" is suggested (mobile)
-2. Install → app opens in its own window with the ODTAULAI icon
+2. Install → app opens in its own window with the OdTauLai icon
 3. Turn off Wi-Fi → app still loads (service worker serves from cache)
 4. Tasks, timers, settings all persist across sessions and reloads
 
@@ -165,9 +165,9 @@ Then update `manifest.json` colors to match your brand:
 
 ## Content-Security-Policy (CSP)
 
-ODTAULAI ships without a CSP by default — most static hosts (Netlify, GitHub Pages, Vercel, Cloudflare Pages) serve without one and the app works fine.
+OdTauLai ships a permissive meta CSP in `index.html` — practical, not maximalist. The shipped policy allows `'unsafe-inline'` (the app uses inline `onclick` handlers throughout), `'wasm-unsafe-eval'` (Transformers.js needs it), and broad `connect-src http: https:` (calendar feeds in `js/calfeeds.js` accept user-configured CORS proxy URLs). On most static hosts (Netlify, GitHub Pages, Vercel, Cloudflare Pages) this is what gets served and everything works.
 
-If your host enforces a strict CSP via HTTP headers, the embedding and optional Ask features need these allow-list entries. Everything else is same-origin.
+If your host wants to enforce a stricter CSP via HTTP headers (overriding the meta tag), the embedding and optional Ask features need at least these allow-list entries:
 
 ```
 default-src 'self';
@@ -177,6 +177,8 @@ img-src     'self' data: blob:;
 worker-src  'self' blob: https://cdn.jsdelivr.net;
 connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://cdn-lfs.huggingface.co https://*.huggingface.co;
 ```
+
+Note: this stricter alternative drops `'unsafe-inline'` from `script-src`, which will break the inline `onclick` handlers in `index.html`. Migrate them to `addEventListener` first if you need this. It also tightens `connect-src` to the inference endpoints only — calendar feeds via user proxies will be blocked.
 
 Why each entry:
 - `cdn.jsdelivr.net` — Transformers.js ESM module + its WASM/worker assets.

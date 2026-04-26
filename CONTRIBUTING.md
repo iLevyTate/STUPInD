@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve ODTAULAI.
+Thanks for helping improve OdTauLai.
 
 ## Principles
 
