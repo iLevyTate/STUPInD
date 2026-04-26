@@ -58,6 +58,23 @@ test('validator: SNOOZE_TASK coerces id and untilDate', () => {
   assert.equal(r.valid[0].args.untilDate, '2026-05-01');
 });
 
+test('validator: UPDATE_TASK accepts hiddenUntil as ISO date', () => {
+  const { validateOps } = loadSchema();
+  const ctx = ctxFrom([{ id: 5, name: 'T', archived: false }], []);
+  const r = validateOps([{ name: 'UPDATE_TASK', args: { id: 5, hiddenUntil: '2026-05-01' } }], ctx);
+  assert.equal(r.valid.length, 1);
+  assert.equal(r.valid[0].args.hiddenUntil, '2026-05-01');
+});
+
+test('validator: UPDATE_TASK rejects malformed hiddenUntil', () => {
+  const { validateOps } = loadSchema();
+  const ctx = ctxFrom([{ id: 5, name: 'T', archived: false }], []);
+  const r = validateOps([{ name: 'UPDATE_TASK', args: { id: 5, hiddenUntil: 'not-a-date' } }], ctx);
+  assert.equal(r.valid.length, 1);
+  // Optional fields with null coercion are silently dropped — not an outright reject.
+  assert.equal(r.valid[0].args.hiddenUntil, undefined);
+});
+
 test('tolerant JSON parser strips code fences and ignores trailing prose', () => {
   const { parseOpsJson } = loadSchema();
   const out = parseOpsJson('```json\n[{"name":"MARK_DONE","args":{"id":5}}]\n```\n\nSome trailing text');
