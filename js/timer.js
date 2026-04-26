@@ -1,32 +1,17 @@
 // ========== CONFIG ==========
 function updateConfig(){cfg.work=Math.max(1,parseInt(gid('cfgWork').value)||25);cfg.short=Math.max(1,parseInt(gid('cfgShort').value)||5);cfg.long=Math.max(1,parseInt(gid('cfgLong').value)||15);cfg.cycle=Math.max(2,parseInt(gid('cfgCycle').value)||4);if(getTimerState()==='idle'){setPhaseTime();renderTimerChrome()}saveState('user')}
 function toggleOpt(id){const el=gid(id);el.classList.toggle('on');const on=el.classList.contains('on');el.setAttribute('aria-checked',on?'true':'false');if(id==='togBreak')cfg.autoBreak=on;if(id==='togWork')cfg.autoWork=on;if(id==='togSound'){cfg.sound=on;if(running){if(cfg.sound)schedulePhaseAudio();else cancelScheduledAudio()}}if(id==='togLink')cfg.linkTask=on;if(id==='togNotif'){cfg.notif=on;if(cfg.notif)reqNotifPerm()}if(id==='togSnpNote')cfg.askSessionNote=on;saveState('user')}
-let settingsOpen=false;
+// Settings is now a regular tab page. The legacy `settingsOpen` flag and
+// `toggleSettings()` accordion are kept as no-ops for back-compat with any
+// callers (Cmd+K, deep-links) until those are migrated.
+let settingsOpen=true;
 function toggleSettings(){
-  const body=gid('settingsBody'),arrow=gid('settingsArrow');
-  if(!body)return;
-  settingsOpen=!settingsOpen;
-  if(settingsOpen){
-    body.style.overflowY='auto';
-    const cap=Math.floor(window.innerHeight*0.92);
-    body.style.maxHeight=Math.min(body.scrollHeight+8,cap)+'px';
-    if(typeof renderClassificationSettings==='function') renderClassificationSettings();
-  }else{
-    body.style.maxHeight='0';
-    body.style.overflowY='';
-  }
-  if(arrow)arrow.style.transform=settingsOpen?'rotate(180deg)':'';
+  // Ensure the live sub-managers are fresh whenever something asks to "open"
+  // settings (e.g. from the command palette). The panel is always visible
+  // when the Settings tab is active, so this is just a re-render hook.
+  if(typeof renderClassificationSettings==='function') renderClassificationSettings();
+  if(typeof renderListsManager==='function') renderListsManager();
 }
-function _reflowSettingsIfOpen(){
-  if(!settingsOpen)return;
-  const body=gid('settingsBody');
-  if(!body)return;
-  body.style.overflowY='auto';
-  const cap=Math.floor(window.innerHeight*0.92);
-  body.style.maxHeight=Math.min(body.scrollHeight+8,cap)+'px';
-}
-window.addEventListener('resize',_reflowSettingsIfOpen,{passive:true});
-window.addEventListener('orientationchange',_reflowSettingsIfOpen);
 
 // ========== STATE ==========
 let cfg={work:25,short:5,long:15,cycle:4,autoBreak:true,autoWork:false,sound:true,linkTask:true,notif:true,timerSub:'pomo',hideHabitsInMainViews:true,askSessionNote:true,focusListMode:false,phasePreset:'classic'};
@@ -60,6 +45,11 @@ let _subtaskFormDraftText='',_subtaskFormDraftParent=null;
 let lists=[],listIdCtr=0,activeListId=null;
 let taskFilters={search:'',status:'all',priority:'all',category:'all'};
 let taskSortBy='smart',taskView='list',editingTaskId=null,smartView='all';
+// UI preference: smart-view chip bar collapsed-by-default. Persisted with the
+// rest of state via storage.js. Showing only the active chip by default keeps
+// the task header compact; users can expand to switch via the "All views ▾"
+// toggle (auto-collapses again after selecting a view).
+let smartViewsExpanded=false;
 let taskGroupBy='none',calMonth=null,theme='dark';
 let collapsedSections={};
 let timeLog=[],goals=[],goalIdCtr=0,logIdCtr=0;

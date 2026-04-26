@@ -125,8 +125,12 @@
   .small-btn{background:0 0;color:#3a4a5a;font-size:9px;letter-spacing:1px;border:1px solid #1e2838;border-radius:5px;padding:4px 10px;margin-left:6px}
 
   .stitle{display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer;user-select:none}
+  .stitle.stitle-static{cursor:default}
   .sarrow{margin-left:auto;color:#3a5060;font-size:12px;transition:transform .2s}
   .sbody{overflow:hidden;transition:max-height .35s ease}
+  /* Settings tab uses a static (non-collapsing) body — the tab itself is the
+     toggle, so the legacy max-height accordion is opted out via this class. */
+  .sbody.sbody-static{overflow:visible;max-height:none!important;transition:none}
   .srow{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
   .sr-lbl{font-size:10px;color:#6a8aaa;letter-spacing:1px;min-width:120px}
   .sinput{width:56px;padding:6px 8px;background:#0d1a28;border:1px solid #1a2840;border-radius:6px;color:#c8d6e5;font-size:13px;font-family:inherit;text-align:center;outline:0}
@@ -375,7 +379,21 @@
   .tb-divider{width:1px;align-self:stretch;background:#1a2d44}
 
   /* Smart views chips */
-  .smart-views{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;padding:4px;background:#0a1320;border-radius:10px;border:1px solid #152238}
+  .smart-views{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;padding:4px;background:#0a1320;border-radius:10px;border:1px solid #152238;align-items:center}
+  /* Collapsed: only the active chip + toggle remain visible. Hides the rest
+     instead of unmounting them so counts (#svcXxx) stay live & queryable. */
+  .smart-views--collapsed .sv-chip:not(.active){display:none}
+  .sv-toggle{
+    display:inline-flex;align-items:center;gap:4px;
+    padding:7px 10px;border-radius:7px;border:1px dashed var(--border,#2a3a52);
+    background:transparent;color:var(--text-3,#5a8ab5);
+    font-size:11px;font-weight:600;letter-spacing:.4px;
+    cursor:pointer;font-family:inherit;flex-shrink:0;order:99;
+    transition:.15s;
+  }
+  .sv-toggle:hover{background:var(--bg-2,#152a3e);color:var(--text-1,#e2e8f0);border-style:solid}
+  .sv-toggle-arrow{font-size:10px;line-height:1}
+  .smart-views:not(.smart-views--collapsed) .sv-toggle{order:99}
   .sv-chip{padding:7px 12px;background:transparent;border:none;border-radius:7px;color:#5a8ab5;font-size:10px;font-weight:700;letter-spacing:.8px;cursor:pointer;transition:.15s;font-family:inherit;display:flex;align-items:center;gap:5px;text-transform:uppercase}
   .sv-chip:hover{background:#152a3e;color:#c8d6e5}
   .sv-chip.active{background:linear-gradient(135deg,#1a3a5c,#1e4a6e);color:#e2e8f0;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
@@ -2357,6 +2375,23 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
   margin:0 0 8px;
 }
 
+/* Data-tab — consistent panel rhythm so Stats / Log / Archive / Export sit
+   as visually sibling cards rather than colliding stacked sections. */
+.panel-data{margin-bottom:14px}
+.panel-data:last-of-type{margin-bottom:0}
+.archive-list{max-height:400px;overflow-y:auto}
+.archive-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+
+/* Export button color variants — replaces inline styles for maintainability. */
+.export-btn.export-json{background:rgba(61,139,204,.1);border-color:rgba(61,139,204,.3);color:#3d8bcc}
+.export-btn.export-ics{background:rgba(155,89,182,.1);border-color:rgba(155,89,182,.3);color:#9b59b6}
+.export-btn.export-import{cursor:pointer;background:rgba(46,204,113,.08);border-color:rgba(46,204,113,.25);color:#2ecc71}
+.export-btn.export-backup{background:rgba(46,204,113,.12);border-color:rgba(46,204,113,.3);color:#2ecc71}
+.export-btn.export-restore{cursor:pointer;background:rgba(61,139,204,.1);border-color:rgba(61,139,204,.3);color:#3d8bcc}
+.export-btn.export-encrypted{background:rgba(155,89,182,.12);border-color:rgba(155,89,182,.3);color:#9b59b6}
+.export-btn.export-encrypted-restore{cursor:pointer;background:rgba(155,89,182,.08);border-color:rgba(155,89,182,.25);color:#9b59b6}
+.export-row-secondary{margin-top:8px}
+
 /* v24 — priority stripe via data-priority (replaces .priority-*-item on row) */
 .task-item[data-priority="urgent"]:not(.starred-task){border-left-color:var(--danger)}
 .task-item[data-priority="high"]:not(.starred-task){border-left-color:var(--warning)}
@@ -2408,10 +2443,38 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
 .class-mgr-cat--hidden{opacity:0.55}
 .class-mgr-details{margin-top:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg-1);padding:0 8px 8px;font-size:12px;color:var(--text-2)}
 .class-mgr-details > summary{cursor:pointer;padding:6px 0;font-size:11px;color:var(--text-3)}
+.class-mgr-details[data-empty="1"] > summary{color:var(--accent,#3d8bcc)}
 .class-mgr-focus-p,.class-mgr-ex{margin:6px 0 0}
 .class-mgr-cv{margin:6px 0 0 18px;padding:0}
+.class-mgr-field{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.class-mgr-field-lbl{font-size:11px;color:var(--text-3);font-weight:600;letter-spacing:.02em;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.class-mgr-field-lbl em{font-style:normal;color:var(--text-3);font-weight:400}
+.class-mgr-field-lbl code{font-size:10px;background:var(--bg-2);padding:1px 4px;border-radius:3px}
+.class-mgr-ta{font-family:inherit;font-size:12px;line-height:1.4;width:100%;resize:vertical;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-1);min-height:32px}
+.class-mgr-ta:focus{outline:none;border-color:var(--accent,#3d8bcc)}
+.class-mgr-details-actions{margin-top:8px;display:flex;justify-content:flex-end}
 .class-mgr-reclass{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0 4px}
 .class-mgr-hint{font-size:11px;color:var(--text-3)}
+
+/* Settings -> Lists manager. Visually parallel to the Classifications rows
+   so the two surfaces feel like siblings, not alternatives. */
+.lists-mgr-row{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px;
+  padding:10px;border-radius:var(--r-sm);background:var(--bg-2);border:1px solid var(--border);
+}
+.lists-mgr-dot{flex:0 0 12px;width:12px;height:12px;border-radius:50%;display:inline-block}
+.lists-mgr-meta{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lists-mgr-name{font-size:13px;font-weight:600;color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lists-mgr-desc{font-size:11px;color:var(--text-3);line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical}
+.lists-mgr-desc--empty{font-style:italic;color:var(--text-4)}
+.lists-mgr-count{flex:0 0 auto;font-size:11px;color:var(--text-3);padding:2px 8px;background:var(--bg-3);border-radius:999px}
+.lists-mgr-del:disabled{opacity:.4;cursor:not-allowed}
+.lists-mgr-add{margin-top:8px}
+@media (max-width:520px){
+  .lists-mgr-row{flex-direction:column;align-items:stretch}
+  .lists-mgr-meta{flex:1 1 auto}
+  .lists-mgr-count{align-self:flex-start}
+}
 
 .wn-cal-hint{display:block;margin-top:4px;font-size:11px;color:var(--text-3);font-style:italic}
 .cal-ev-mk-task{margin-left:6px;padding:2px 6px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);cursor:pointer}

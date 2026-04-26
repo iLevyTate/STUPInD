@@ -1228,7 +1228,12 @@ function showTab(tab){
   activeTab=tab;
   document.querySelectorAll('[data-tab]').forEach(el=>{el.style.display=el.dataset.tab===tab?'':'none'});
   document.querySelectorAll('.nav-tab').forEach(el=>{const on=el.dataset.navtab===tab;el.classList.toggle('active',on);el.setAttribute('aria-selected',on?'true':'false')});
-  if(tab==='settings'&&!settingsOpen)toggleSettings();
+  if(tab==='settings'){
+    // Refresh the dynamic sub-managers so legacy data (renamed categories,
+    // newly added lists) shows up immediately when the tab is opened.
+    if(typeof renderClassificationSettings==='function') renderClassificationSettings();
+    if(typeof renderListsManager==='function') renderListsManager();
+  }
   const nav=gid('navTabs');
   if(nav&&nav.getBoundingClientRect().top<0){
     window.scrollTo({top:nav.offsetTop-20,behavior:'smooth'});

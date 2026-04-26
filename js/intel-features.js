@@ -311,6 +311,73 @@ function classificationSetColor(idx, colorVal){
   if(typeof saveState === 'function') saveState('user');
 }
 
+/**
+ * Edit-in-place setters for the "Life area details" disclosure. They persist
+ * user-authored copy so legacy/custom category ids get meaningful focus,
+ * core values and examples instead of falling back to the empty defaults of
+ * `getCategoryDef`. Centroids are invalidated so embedding-based predictions
+ * rebuild on next use.
+ */
+function classificationSetFocus(idx, focus){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const row = cfg.categories[idx];
+  if(!row) return;
+  row.focus = String(focus || '').trim().slice(0, 500);
+  invalidateCategoryCentroids();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function classificationSetExamples(idx, examplesText){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const row = cfg.categories[idx];
+  if(!row) return;
+  row.examples = String(examplesText || '')
+    .split(/\r?\n|,/)
+    .map(x => x.trim())
+    .filter(Boolean)
+    .slice(0, 32);
+  invalidateCategoryCentroids();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function classificationSetCoreValues(idx, valuesText){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const row = cfg.categories[idx];
+  if(!row) return;
+  // Each non-empty line: "key: definition" (definition optional).
+  row.coreValues = String(valuesText || '')
+    .split(/\r?\n/)
+    .map(line => {
+      const s = line.trim();
+      if(!s) return null;
+      const m = s.match(/^([^:]+?)\s*:\s*(.*)$/);
+      if(m) return { key: m[1].trim().slice(0, 80), def: m[2].trim().slice(0, 240) };
+      return { key: s.slice(0, 80), def: '' };
+    })
+    .filter(x => x && x.key)
+    .slice(0, 32);
+  invalidateCategoryCentroids();
+  if(typeof saveState === 'function') saveState('user');
+}
+
+function classificationResetDetails(idx){
+  if(typeof cfg === 'undefined' || !cfg) return;
+  ensureClassificationConfig(cfg);
+  const row = cfg.categories[idx];
+  if(!row) return;
+  const base = DEFAULT_CATEGORY_DEFS.find(d => d.id === row.id);
+  if(!base) return;
+  row.focus = base.focus || base.description || '';
+  row.coreValues = (base.coreValues || []).map(cv => ({ ...cv }));
+  row.examples = (base.examples || []).slice();
+  invalidateCategoryCentroids();
+  renderClassificationSettings();
+  if(typeof saveState === 'function') saveState('user');
+}
+
 async function classificationAdd(kind){
   if(typeof cfg === 'undefined' || !cfg) return;
   const promptLabel = kind === 'cat' ? 'New category name:' : 'New context name:';
@@ -345,14 +412,23 @@ function renderClassificationSettings(){
   let h = '<div class="class-mgr-block"><div class="class-mgr-hdr">Life areas</div>';
   cfg.categories.forEach((obj, idx) => {
     const def = (typeof getCategoryDef === 'function' ? getCategoryDef(obj.id) : null) || obj;
-    const focusLine = esc((def && def.focus) ? def.focus : '');
-    const cv = (def && Array.isArray(def.coreValues)) ? def.coreValues : [];
-    const cvHtml = cv.slice(0, 20).map(c => {
-      if(c && typeof c === 'object' && c.key) return '<li><strong>' + esc(String(c.key)) + '</strong> — ' + esc(String(c.def || '')) + '</li>';
-      return '<li>' + esc(String(c)) + '</li>';
-    }).join('');
-    const ex = (def && Array.isArray(def.examples)) ? def.examples : [];
-    const exHtml = ex.length ? ex.map(x => esc(String(x))).join(', ') : '—';
+    // Prefer the row's own values when present (so renames/legacy ids survive)
+    // and only fall back to the resolved def — which may be a default — for
+    // initial seed values in the editor.
+    const focusVal = String(obj.focus != null && obj.focus !== '' ? obj.focus : (def && def.focus ? def.focus : ''));
+    const cv = (Array.isArray(obj.coreValues) && obj.coreValues.length)
+      ? obj.coreValues
+      : (def && Array.isArray(def.coreValues) ? def.coreValues : []);
+    const cvText = cv.map(c => {
+      if(c && typeof c === 'object' && c.key) return c.key + (c.def ? ': ' + c.def : '');
+      return String(c || '');
+    }).filter(Boolean).join('\n');
+    const ex = (Array.isArray(obj.examples) && obj.examples.length)
+      ? obj.examples
+      : (def && Array.isArray(def.examples) ? def.examples : []);
+    const exText = ex.map(x => String(x)).filter(Boolean).join('\n');
+    const hasBaseDefault = !!DEFAULT_CATEGORY_DEFS.find(d => d.id === obj.id);
+    const isEmpty = !focusVal && !cvText && !exText;
 
     const opt = iconKeys.map(k => '<option value="' + esc(k) + '"' + (k === obj.icon ? ' selected' : '') + '>' + esc(k) + '</option>').join('');
     let colOpts = '';
@@ -362,6 +438,33 @@ function renderClassificationSettings(){
     colOpts += CLASSIFICATION_COLOR_PRESETS.map(p =>
       '<option value="' + esc(p.value) + '"' + (p.value === obj.color ? ' selected' : '') + '>' + esc(p.label) + '</option>',
     ).join('');
+
+    const detailsBody = ''
+      + '<label class="class-mgr-field">'
+      +   '<span class="class-mgr-field-lbl">Focus</span>'
+      +   '<textarea class="class-mgr-in class-mgr-ta" rows="2" '
+      +     'placeholder="What this life area is about (one or two sentences)" '
+      +     'onchange="classificationSetFocus(' + idx + ',this.value)">' + esc(focusVal) + '</textarea>'
+      + '</label>'
+      + '<label class="class-mgr-field">'
+      +   '<span class="class-mgr-field-lbl">Core values <em class="class-mgr-hint">one per line — <code>key: definition</code></em></span>'
+      +   '<textarea class="class-mgr-in class-mgr-ta" rows="3" '
+      +     'placeholder="Health: take care of body and mind&#10;Growth: keep learning" '
+      +     'onchange="classificationSetCoreValues(' + idx + ',this.value)">' + esc(cvText) + '</textarea>'
+      + '</label>'
+      + '<label class="class-mgr-field">'
+      +   '<span class="class-mgr-field-lbl">Example tasks <em class="class-mgr-hint">one per line or comma-separated</em></span>'
+      +   '<textarea class="class-mgr-in class-mgr-ta" rows="3" '
+      +     'placeholder="Walk for 30 min&#10;Meditate 10 min" '
+      +     'onchange="classificationSetExamples(' + idx + ',this.value)">' + esc(exText) + '</textarea>'
+      + '</label>'
+      + (hasBaseDefault
+        ? '<div class="class-mgr-details-actions"><button type="button" class="btn-ghost btn-sm" '
+          + 'onclick="classificationResetDetails(' + idx + ')">Reset to defaults</button></div>'
+        : '');
+
+    const summaryLabel = isEmpty ? 'Life area details — set up' : 'Life area details';
+
     h += '<div class="class-mgr-cat' + (obj.hidden ? ' class-mgr-cat--hidden' : '') + '">'
       + '<div class="class-mgr-row">'
       + '<input type="text" class="class-mgr-in" value="' + esc(obj.label) + '" '
@@ -373,10 +476,8 @@ function renderClassificationSettings(){
       + '<button type="button" class="class-mgr-btn" onclick="classificationMove(' + idx + ',1)">↓</button>'
       + '<code class="class-mgr-id" title="Stable id stored on tasks">' + esc(obj.id) + '</code>'
       + '</div>'
-      + '<details class="class-mgr-details"><summary>Life area details</summary>'
-      + (focusLine ? '<p class="class-mgr-focus-p"><strong>Focus</strong> — ' + focusLine + '</p>' : '')
-      + (cvHtml ? '<ul class="class-mgr-cv">' + cvHtml + '</ul>' : '')
-      + '<p class="class-mgr-ex"><strong>Example tasks</strong> — ' + exHtml + '</p>'
+      + '<details class="class-mgr-details"' + (isEmpty ? ' data-empty="1"' : '') + '><summary>' + esc(summaryLabel) + '</summary>'
+      + detailsBody
       + '</details></div>';
   });
   h += '<div class="class-mgr-reclass">'
@@ -1211,4 +1312,8 @@ window.classificationToggleHidden = classificationToggleHidden;
 window.classificationSetLabel = classificationSetLabel;
 window.classificationSetIcon = classificationSetIcon;
 window.classificationSetColor = classificationSetColor;
+window.classificationSetFocus = classificationSetFocus;
+window.classificationSetExamples = classificationSetExamples;
+window.classificationSetCoreValues = classificationSetCoreValues;
+window.classificationResetDetails = classificationResetDetails;
 window.classificationAdd = classificationAdd;

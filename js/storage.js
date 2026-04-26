@@ -309,7 +309,7 @@ function saveState(reason){
     quickTimers, qtIdCtr,
     activeTab,
     lists, listIdCtr, activeListId,
-    taskView, taskSortBy, smartView, taskGroupBy, theme, collapsedSections,
+    taskView, taskSortBy, smartView, smartViewsExpanded, taskGroupBy, theme, collapsedSections,
     taskFiltersSnapshot: (function(){
       const ts = gid('taskSearch'), st = gid('filterStatus'), pr = gid('filterPriority'), cat = gid('filterCategory'), sem = gid('taskSearchSemantic');
       return {
@@ -499,6 +499,7 @@ function _applyState(s){
     if(s.taskView   && validViews.includes(s.taskView))  taskView   = s.taskView;
     if(sortIn && validSorts.includes(sortIn)) taskSortBy = sortIn;
     if(s.smartView  && validSmart.includes(s.smartView)) smartView  = s.smartView;
+    if(typeof s.smartViewsExpanded === 'boolean') smartViewsExpanded = s.smartViewsExpanded;
     if(groupIn && validGroup.includes(groupIn)) taskGroupBy = groupIn;
     if(s.theme      && ['dark','light'].includes(s.theme)) theme = s.theme;
     if(s.collapsedSections && typeof s.collapsedSections==='object') collapsedSections = s.collapsedSections;
@@ -1059,7 +1060,7 @@ async function exportDataEncrypted(){
       tasks, lists, listIdCtr, taskIdCtr, activeListId,
       goals, goalIdCtr, logIdCtr, timeLog,
       sessionHistory, totalPomos, totalBreaks, totalFocusSec,
-      collapsedSections, taskGroupBy, smartView, taskSortBy, taskView, taskFilters,
+      collapsedSections, taskGroupBy, smartView, smartViewsExpanded, taskSortBy, taskView, taskFilters,
       cfg, theme, pomosInCycle, totalDuration, remaining, finished, phase,
       activeTab, syncTaskDels, syncListDels, syncGoalDels, stateEpoch,
     },

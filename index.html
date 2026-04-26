@@ -183,8 +183,11 @@
       </div>
     </div>
 
-    <!-- Smart views only — lightweight navigation -->
-    <div class="smart-views" id="smartViews">
+    <!-- Smart views — collapsed by default to active chip + toggle, expandable. -->
+    <div class="smart-views smart-views--collapsed" id="smartViews">
+      <button type="button" class="sv-toggle" id="svToggle" onclick="toggleSmartViews()" aria-expanded="false" aria-controls="smartViews" title="Show all views">
+        <span class="sv-toggle-lbl">All views</span><span class="sv-toggle-arrow" aria-hidden="true">▾</span>
+      </button>
       <button class="sv-chip active" data-view="all" onclick="setSmartView('all')"><span class="sv-icon" data-icon="list"></span>All<span class="sv-count" id="svcAll">0</span></button>
       <button class="sv-chip" data-view="inbox" onclick="setSmartView('inbox')" title="Untriaged — no list, no category, no due date, no tags"><span class="sv-icon" data-icon="inbox"></span>Inbox<span class="sv-count" id="svcInbox">0</span></button>
       <button class="sv-chip" data-view="today" onclick="setSmartView('today')"><span class="sv-icon" data-icon="calendar"></span>Today<span class="sv-count" id="svcToday">0</span></button>
@@ -411,16 +414,10 @@
     <div id="intelPanel" class="intel-panel-root"></div>
   </div>
 
-  <!-- Log -->
-  <div class="panel" data-tab="data">
-    <div class="shdr"><div class="sdot" style="background:var(--long)"></div><span class="slbl">Time Log</span><button class="small-btn" onclick="clearLog()">Clear</button></div>
-    <div class="log-list" id="logList"><div class="log-empty" id="logEmpty">Completed sessions appear here</div></div>
-  </div>
-
   <!-- Settings -->
-  <div class="panel" data-tab="settings">
-    <div class="stitle" onclick="toggleSettings()"><div class="sdot" style="background:#3d8bcc"></div><span class="slbl">Settings</span><span class="sarrow" id="settingsArrow">▼</span></div>
-    <div class="sbody" id="settingsBody" style="max-height:0">
+  <div class="panel panel-settings" data-tab="settings">
+    <div class="stitle stitle-static"><div class="sdot" style="background:#3d8bcc"></div><span class="slbl">Settings</span></div>
+    <div class="sbody sbody-static" id="settingsBody">
       <details class="set-section" open>
         <summary class="set-section-sum">General</summary>
         <div class="set-section-body">
@@ -464,6 +461,17 @@
       </details>
 
       <details class="set-section">
+        <summary class="set-section-sum">Lists</summary>
+        <div class="set-section-body">
+          <p style="font-size:11px;color:var(--text-3);line-height:1.5;margin:0 0 10px">
+            Flexible groupings &mdash; e.g. <em>Research</em>, <em>School</em>, <em>Side Project</em>. Lists are <strong>more flexible than life areas</strong> (which are themed buckets) and <strong>less ad-hoc than tags</strong>; they may overlap with life areas freely. Each list takes an optional description that feeds Auto-organize so new tasks route here automatically.
+          </p>
+          <div id="listsManager"></div>
+          <button type="button" class="btn-ghost btn-sm lists-mgr-add" onclick="addList()">+ Add list</button>
+        </div>
+      </details>
+
+      <details class="set-section">
         <summary class="set-section-sum">Integrations</summary>
         <div class="set-section-body">
           <div class="srow" style="justify-content:space-between;gap:10px">
@@ -503,8 +511,8 @@
     </div>
   </div>
 
-  <!-- Stats & Export -->
-  <div class="panel" data-tab="data">
+  <!-- Today's Stats (Data tab) -->
+  <div class="panel panel-data" data-tab="data" data-data-section="stats">
     <div class="shdr"><div class="sdot" style="background:var(--long)"></div><span class="slbl">Today's Stats</span><button class="small-btn" onclick="resetStats()">Reset Day</button></div>
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-val wc" id="statPomos">0</div><div class="stat-lbl">Sessions</div></div>
@@ -514,8 +522,29 @@
     <div class="history" id="historyBlocks"></div>
     <div class="stats-by-area" id="statsByArea" style="display:none"></div>
     <div class="focus-streak" id="focusStreak" style="display:none"></div>
+  </div>
 
-    <!-- ═══ DAILY REPORT — human-readable summary of today's activity ═══ -->
+  <!-- Time Log (Data tab) — sessions in chronological order. -->
+  <div class="panel panel-data" data-tab="data" data-data-section="log">
+    <div class="shdr"><div class="sdot" style="background:var(--long)"></div><span class="slbl">Time Log</span><button class="small-btn" onclick="clearLog()">Clear</button></div>
+    <div class="log-list" id="logList"><div class="log-empty" id="logEmpty">Completed sessions appear here</div></div>
+  </div>
+
+  <!-- Past Days Archive (Data tab) -->
+  <div class="panel panel-data" data-tab="data" data-data-section="archive">
+    <div class="shdr"><div class="sdot" style="background:#8e44ad"></div><span class="slbl">Past Days</span><span class="scnt" id="archiveCount">0 days</span></div>
+    <div id="archiveList" class="archive-list"><div class="iempty" id="archiveEmpty">History will appear here after each day</div></div>
+    <div class="archive-actions">
+      <button class="export-btn export-csv" onclick="exportAllCSV()">Export All History (.csv)</button>
+      <button class="clear-hist-btn" onclick="clearArchive()">Clear History</button>
+    </div>
+  </div>
+
+  <!-- Export & Backup (Data tab) — own panel so the Stats panel stays scannable. -->
+  <div class="panel panel-data" data-tab="data" data-data-section="export">
+    <div class="shdr"><div class="sdot" style="background:#3d8bcc"></div><span class="slbl">Export &amp; Backup</span></div>
+
+    <!-- Daily report — human-readable summary -->
     <div class="export-section">
       <div class="export-section-head">Daily report</div>
       <p class="export-section-desc">Human-readable summary of today's tasks, sessions, and time — for journaling or sharing.</p>
@@ -526,49 +555,39 @@
       </div>
     </div>
 
-    <!-- ═══ TASK EXPORT — unified CSV/JSON, both import-compatible ═══ -->
+    <!-- Tasks export/import -->
     <div class="export-section">
       <div class="export-section-head">Tasks (export &amp; import)</div>
       <p class="export-section-desc">Unified task data — same fields in both CSV and JSON. CSV opens in Excel/Sheets, JSON preserves full fidelity (checklist, notes). Import auto-detects the format and merges by task id.</p>
       <div class="export-row">
         <button class="export-btn export-csv" onclick="exportTasksCSV()">⬇ Tasks (.csv)</button>
-        <button class="export-btn" style="background:rgba(61,139,204,.1);border-color:rgba(61,139,204,.3);color:#3d8bcc" onclick="exportTasksJSON()">⬇ Tasks (.json)</button>
-        <button class="export-btn" style="background:rgba(155,89,182,.1);border-color:rgba(155,89,182,.3);color:#9b59b6" onclick="exportTasksICS()" title="Read-only feed of tasks-with-due-dates for Google/Apple Calendar etc.">⬇ Tasks (.ics)</button>
-        <label class="export-btn" style="cursor:pointer;background:rgba(46,204,113,.08);border-color:rgba(46,204,113,.25);color:#2ecc71">
+        <button class="export-btn export-json" onclick="exportTasksJSON()">⬇ Tasks (.json)</button>
+        <button class="export-btn export-ics" onclick="exportTasksICS()" title="Read-only feed of tasks-with-due-dates for Google/Apple Calendar etc.">⬇ Tasks (.ics)</button>
+        <label class="export-btn export-import">
           ⬆ Import tasks
-          <input type="file" accept=".json,.csv" style="display:none" onchange="importTasks(this.files[0]); this.value=''">
+          <input type="file" accept=".json,.csv" hidden onchange="importTasks(this.files[0]); this.value=''">
         </label>
       </div>
     </div>
 
-    <!-- ═══ FULL BACKUP — everything (tasks, lists, settings, stats, archive) ═══ -->
+    <!-- Full backup — everything -->
     <div class="export-section">
       <div class="export-section-head">Full backup</div>
       <p class="export-section-desc">Complete app snapshot including tasks, lists, settings, daily stats, and archive. Use this to move everything to another device or recover from data loss.</p>
       <div class="export-row">
-        <button class="export-btn" style="background:rgba(46,204,113,.12);border-color:rgba(46,204,113,.3);color:#2ecc71" onclick="exportData()">⬇ Full backup (.json)</button>
-        <label class="export-btn" style="cursor:pointer;background:rgba(61,139,204,.1);border-color:rgba(61,139,204,.3);color:#3d8bcc">
+        <button class="export-btn export-backup" onclick="exportData()">⬇ Full backup (.json)</button>
+        <label class="export-btn export-restore">
           ⬆ Restore backup
-          <input type="file" accept=".json" style="display:none" onchange="importData(this.files[0]); this.value=''">
+          <input type="file" accept=".json" hidden onchange="importData(this.files[0]); this.value=''">
         </label>
       </div>
-      <div class="export-row" style="margin-top:8px">
-        <button class="export-btn" style="background:rgba(155,89,182,.12);border-color:rgba(155,89,182,.3);color:#9b59b6" onclick="exportDataEncrypted()" title="Encrypts the same backup with a passphrase (PBKDF2 + AES-GCM, in-browser only)">⬇ Encrypted backup (.json)</button>
-        <label class="export-btn" style="cursor:pointer;background:rgba(155,89,182,.08);border-color:rgba(155,89,182,.25);color:#9b59b6">
+      <div class="export-row export-row-secondary">
+        <button class="export-btn export-encrypted" onclick="exportDataEncrypted()" title="Encrypts the same backup with a passphrase (PBKDF2 + AES-GCM, in-browser only)">⬇ Encrypted backup (.json)</button>
+        <label class="export-btn export-encrypted-restore">
           ⬆ Restore encrypted
-          <input type="file" accept=".json" style="display:none" onchange="importDataEncrypted(this.files[0]); this.value=''">
+          <input type="file" accept=".json" hidden onchange="importDataEncrypted(this.files[0]); this.value=''">
         </label>
       </div>
-    </div>
-  </div>
-
-  <!-- Past Days Archive -->
-  <div class="panel" data-tab="data">
-    <div class="shdr"><div class="sdot" style="background:#8e44ad"></div><span class="slbl">Past Days</span><span class="scnt" id="archiveCount">0 days</span></div>
-    <div id="archiveList" style="max-height:400px;overflow-y:auto"><div class="iempty" id="archiveEmpty">History will appear here after each day</div></div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="export-btn export-csv" onclick="exportAllCSV()">Export All History (.csv)</button>
-      <button class="clear-hist-btn" onclick="clearArchive()">Clear History</button>
     </div>
   </div>
 

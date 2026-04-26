@@ -382,7 +382,10 @@ document.querySelectorAll('[data-tab]').forEach(el=>{el.style.display=el.dataset
 document.querySelectorAll('.nav-tab').forEach(el=>{const on=el.dataset.navtab===activeTab;el.classList.toggle('active',on);el.setAttribute('aria-selected',on?'true':'false')});
 if(activeTab==='focus'&&typeof setTimerSub==='function') setTimerSub(cfg.timerSub||'pomo');
 if(typeof syncQaHintVisibility==='function') syncQaHintVisibility();
-if(activeTab==='settings'&&!settingsOpen)toggleSettings();
+if(activeTab==='settings'){
+  if(typeof renderClassificationSettings==='function') renderClassificationSettings();
+  if(typeof renderListsManager==='function') renderListsManager();
+}
 
 // PWA status — standalone / file / SW; install UI lives in pwa.js (refreshPWAInstallUI)
 (function(){
