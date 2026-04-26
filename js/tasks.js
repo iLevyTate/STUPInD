@@ -605,6 +605,40 @@ function restoreTask(id){
   renderTaskList();saveState('user')
 }
 
+/**
+ * Snooze (defer) a task: hide it from main views until the given date.
+ * Distinct from rescheduling — does NOT touch dueDate or remindAt.
+ */
+function snoozeTask(id, untilISO){
+  if(typeof event!=='undefined' && event && event.stopPropagation) event.stopPropagation();
+  const t=findTask(id); if(!t) return;
+  if(typeof untilISO !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(untilISO)) return;
+  if(untilISO <= todayISO()) { t.hiddenUntil=null; }
+  else { t.hiddenUntil=untilISO; }
+  t.lastModified=Date.now();
+  renderTaskList(); saveState('user');
+}
+
+/**
+ * Snooze N days from today. Convenience wrapper for swipe / palette actions.
+ */
+function snoozeTaskForDays(id, days){
+  const n=parseInt(days,10);
+  if(!Number.isFinite(n) || n<=0) return;
+  const d=new Date();
+  d.setDate(d.getDate()+n);
+  const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  snoozeTask(id, iso);
+}
+
+function unsnoozeTask(id){
+  if(typeof event!=='undefined' && event && event.stopPropagation) event.stopPropagation();
+  const t=findTask(id); if(!t) return;
+  t.hiddenUntil=null;
+  t.lastModified=Date.now();
+  renderTaskList(); saveState('user');
+}
+
 function emptyArchive(){
   const removed=tasks.filter(t=>t.archived).map(t=>t.id);
   const keep=tasks.filter(t=>!t.archived);
@@ -691,6 +725,15 @@ function setQuickDate(offset){
   gid('mdDue').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 
+// Quick snooze buttons (G-3) — mirrors setQuickDate but writes to mdSnoozeUntil
+function setQuickSnooze(offset){
+  const el=gid('mdSnoozeUntil'); if(!el) return;
+  if(offset==='clear'){ el.value=''; return; }
+  const d=new Date(); d.setDate(d.getDate()+parseInt(offset,10));
+  el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+window.setQuickSnooze=setQuickSnooze;
+
 // ========== REMINDERS ==========
 function setQuickReminder(offset,hour){
   if(offset==='clear'){gid('mdRemindAt').value='';return}
@@ -744,6 +787,17 @@ setTimeout(checkReminders, 1000);
 
 // Recurring tasks — advance due date for habit-in-place completions
 function advanceRecurringDate(dateStr,recurType){
+  // C-5: "afterNd" variants schedule N days from TODAY (the completion date)
+  // rather than from the previous due date. This is the "after I finish" model
+  // — keep finishing late from compounding indefinitely into the future.
+  const afterMatch = typeof recurType === 'string' ? recurType.match(/^after(\d+)d$/) : null;
+  if(afterMatch){
+    const days = parseInt(afterMatch[1], 10) || 1;
+    const d = new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() + days);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
   const d=dateStr?new Date(dateStr+'T12:00:00'):new Date();
   if(recurType==='daily')d.setDate(d.getDate()+1);
   else if(recurType==='weekdays'){
@@ -941,16 +995,37 @@ function renderLists(){
     chip.onclick=function(){switchList(l.id)};
     chip.title=l.description?l.description+'\n\n(double-click or ✎ to edit)':'Double-click or ✎ to edit list';
     chip.ondblclick=function(e){if(e)e.stopPropagation();editList(l.id)};
-    chip.innerHTML='<span class="lc-dot" style="background:'+sanitizeListColor(l.color)+'"></span>'
-      +esc(l.name)
-      +'<span class="lc-count">'+count+'</span>'
-      +'<span class="lc-edit" onclick="event.stopPropagation();editList('+l.id+')" title="Edit name + description">✎</span>'
-      +'<span class="lc-rm" onclick="event.stopPropagation();removeList('+l.id+')">✕</span>';
+    const dot=document.createElement('span');
+    dot.className='lc-dot';
+    dot.style.background=sanitizeListColor(l.color);
+    const nameNode=document.createTextNode(l.name);
+    const cnt=document.createElement('span');
+    cnt.className='lc-count';
+    cnt.textContent=String(count);
+    const edit=document.createElement('span');
+    edit.className='lc-edit';
+    edit.title='Edit name + description';
+    edit.textContent='✎';
+    edit.onclick=function(e){if(e)e.stopPropagation();editList(l.id)};
+    const rm=document.createElement('span');
+    rm.className='lc-rm';
+    rm.textContent='✕';
+    rm.onclick=function(e){if(e)e.stopPropagation();removeList(l.id)};
+    chip.replaceChildren(dot,nameNode,cnt,edit,rm);
     bar.appendChild(chip)
   });
   const add=document.createElement('button');
   add.className='list-add';add.textContent='+ List';add.onclick=addList;
   bar.appendChild(add);
+  // G-7: visible focus-on-list toggle next to the +List button
+  const focus=document.createElement('button');
+  const focusOn=!!(typeof cfg==='object'&&cfg&&cfg.focusListMode);
+  focus.className='list-focus-toggle'+(focusOn?' on':'');
+  focus.type='button';
+  focus.title=focusOn?'Exit focus-on-list mode':'Hide every list except the active one';
+  focus.textContent=focusOn?'◉ Focus':'◎ Focus';
+  focus.onclick=function(){ if(typeof toggleFocusListMode==='function') toggleFocusListMode(); };
+  bar.appendChild(focus);
 }
 
 // Filter/Sort/Search
@@ -1032,10 +1107,15 @@ function matchesFilters(t){
   if(smartView==='archived'){if(!t.archived)return false}
   else if(t.archived)return false;
   // List filter — only apply on 'all' view, not on focused smart views
-  const listSensitiveViews=['all'];
+  const listSensitiveViews=['all','inbox','waiting','stuck'];
   if(listSensitiveViews.includes(smartView)&&t.listId&&activeListId&&t.listId!==activeListId)return false;
+  // G-7: Focus-on-list mode forces list scoping in EVERY smart view
+  if(typeof cfg==='object'&&cfg&&cfg.focusListMode&&activeListId&&t.listId!==activeListId)return false;
   // Smart view filters
   const today=todayISO();
+  // hiddenUntil (snooze): hide from EVERY main view except 'snoozed' and 'archived'.
+  // Stays visible in completed/done if user already finished it.
+  if(t.hiddenUntil && t.hiddenUntil>today && smartView!=='snoozed' && smartView!=='completed' && smartView!=='archived') return false;
   if(smartView==='today'){if(t.dueDate!==today||t.status==='done')return false}
   else if(smartView==='week'){
     if(!t.dueDate||t.status==='done')return false;
@@ -1049,6 +1129,30 @@ function matchesFilters(t){
   else if(smartView==='impact'){if(t.status==='done'||!_paretoTopSet.has(t.id))return false}
   else if(smartView==='completed'){if(t.status!=='done')return false}
   else if(smartView==='habits'){if(!t.recur||t.archived||t.status==='done')return false}
+  // Inbox: untriaged — no list, no category, no due, no tags, not done.
+  else if(smartView==='inbox'){
+    if(t.status==='done')return false;
+    if(t.listId)return false;
+    if(t.category)return false;
+    if(t.dueDate)return false;
+    if(Array.isArray(t.tags)&&t.tags.length)return false;
+  }
+  // Waiting: tasks the user has flagged as blocked-on-someone-else.
+  else if(smartView==='waiting'){
+    if(t.type!=='waiting'||t.status==='done')return false;
+  }
+  // Stuck: untouched for 14+ days, still open.
+  else if(smartView==='stuck'){
+    if(t.status==='done')return false;
+    const lm=typeof t.lastModified==='number'?t.lastModified:0;
+    const cutoff=Date.now()-(14*86400000);
+    if(!lm||lm>=cutoff)return false;
+  }
+  // Snoozed: hidden-until > today.
+  else if(smartView==='snoozed'){
+    if(!t.hiddenUntil||t.hiddenUntil<=today)return false;
+    if(t.status==='done')return false;
+  }
   if(smartView==='all'){
     const sd=gid('showCompletedAll');
     if((!sd||!sd.checked)&&t.status==='done')return false;
@@ -1077,14 +1181,14 @@ function matchesFilters(t){
 function habitVisibilityOk(t){
   if(smartView==='habits') return true;
   if(typeof cfg!=='object'||!cfg||cfg.hideHabitsInMainViews===false) return true;
-  const mainHide=['all','today','week','unscheduled','starred','impact'];
+  const mainHide=['all','today','week','unscheduled','starred','impact','inbox','waiting','stuck'];
   if(mainHide.includes(smartView)&&t.recur) return false;
   return true;
 }
 /** How many recurring tasks are hidden by "hide habits" in the current smart view (for footer link). */
 function countHabitsHiddenInView(){
   if(typeof cfg!=='object'||!cfg||cfg.hideHabitsInMainViews===false) return 0;
-  const mainHide=['all','today','week','unscheduled','starred','impact'];
+  const mainHide=['all','today','week','unscheduled','starred','impact','inbox','waiting','stuck'];
   if(!mainHide.includes(smartView)) return 0;
   const was=cfg.hideHabitsInMainViews;
   cfg.hideHabitsInMainViews=false;
@@ -1228,14 +1332,22 @@ function renderSmartViewCounts(){
   const weekAhead=new Date();weekAhead.setDate(weekAhead.getDate()+7);
   const weekEnd=weekAhead.getFullYear()+'-'+String(weekAhead.getMonth()+1).padStart(2,'0')+'-'+String(weekAhead.getDate()).padStart(2,'0');
   const set=(id,n)=>{const el=gid(id);if(el)el.textContent=n};
-  set('svcAll',activeNotDone.length);
-  set('svcToday',activeNotDone.filter(t=>t.dueDate===today).length);
-  set('svcWeek',activeNotDone.filter(t=>t.dueDate&&t.dueDate>=today&&t.dueDate<=weekEnd).length);
-  set('svcOverdue',activeNotDone.filter(t=>t.dueDate&&t.dueDate<today).length);
-  set('svcUnscheduled',activeNotDone.filter(t=>!t.dueDate).length);
-  set('svcStarred',activeNotDone.filter(t=>t.starred).length);
-  set('svcImpact',activeNotDone.filter(t=>_paretoTopSet.has(t.id)&&inList(t)).length);
-  set('svcHabits',activeNotDone.filter(t=>t.recur&&inList(t)).length);
+  // Hide snoozed (hiddenUntil > today) from "active" counts so the chips
+  // don't advertise tasks the user explicitly deferred.
+  const visibleNow=activeNotDone.filter(t=>!t.hiddenUntil||t.hiddenUntil<=today);
+  set('svcAll',visibleNow.length);
+  set('svcToday',visibleNow.filter(t=>t.dueDate===today).length);
+  set('svcWeek',visibleNow.filter(t=>t.dueDate&&t.dueDate>=today&&t.dueDate<=weekEnd).length);
+  set('svcOverdue',visibleNow.filter(t=>t.dueDate&&t.dueDate<today).length);
+  set('svcUnscheduled',visibleNow.filter(t=>!t.dueDate).length);
+  set('svcStarred',visibleNow.filter(t=>t.starred).length);
+  set('svcImpact',visibleNow.filter(t=>_paretoTopSet.has(t.id)&&inList(t)).length);
+  set('svcHabits',visibleNow.filter(t=>t.recur&&inList(t)).length);
+  set('svcInbox',visibleNow.filter(t=>!t.listId&&!t.category&&!t.dueDate&&!(Array.isArray(t.tags)&&t.tags.length)).length);
+  set('svcWaiting',visibleNow.filter(t=>t.type==='waiting').length);
+  const stuckCutoff=Date.now()-(14*86400000);
+  set('svcStuck',visibleNow.filter(t=>typeof t.lastModified==='number'&&t.lastModified>0&&t.lastModified<stuckCutoff).length);
+  set('svcSnoozed',activeNotDone.filter(t=>t.hiddenUntil&&t.hiddenUntil>today).length);
   set('svcCompleted',active.filter(t=>t.status==='done').length);
   set('svcArchived',tasks.filter(t=>t.archived&&inList(t)).length);
 }
@@ -1251,6 +1363,7 @@ function renderTaskList(){
   renderLists();
   refreshParetoTopSet();
   renderTodayBanner();
+  if(typeof renderTodayCalEvents==='function') renderTodayCalEvents();
   renderSmartViewCounts();
   if(typeof updateHabitsHiddenNotice==='function') updateHabitsHiddenNotice();
   if(typeof updateFiltersSummary==='function') updateFiltersSummary();

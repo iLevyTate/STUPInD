@@ -1,6 +1,6 @@
 // ========== CONFIG ==========
-function updateConfig(){cfg.work=Math.max(1,parseInt(gid('cfgWork').value)||25);cfg.short=Math.max(1,parseInt(gid('cfgShort').value)||5);cfg.long=Math.max(1,parseInt(gid('cfgLong').value)||15);cfg.cycle=Math.max(2,parseInt(gid('cfgCycle').value)||4);if(!running&&!finished){setPhaseTime();renderTimerChrome()}saveState('user')}
-function toggleOpt(id){const el=gid(id);el.classList.toggle('on');const on=el.classList.contains('on');el.setAttribute('aria-checked',on?'true':'false');if(id==='togBreak')cfg.autoBreak=on;if(id==='togWork')cfg.autoWork=on;if(id==='togSound'){cfg.sound=on;if(running){if(cfg.sound)schedulePhaseAudio();else cancelScheduledAudio()}}if(id==='togLink')cfg.linkTask=on;if(id==='togNotif'){cfg.notif=on;if(cfg.notif)reqNotifPerm()}saveState('user')}
+function updateConfig(){cfg.work=Math.max(1,parseInt(gid('cfgWork').value)||25);cfg.short=Math.max(1,parseInt(gid('cfgShort').value)||5);cfg.long=Math.max(1,parseInt(gid('cfgLong').value)||15);cfg.cycle=Math.max(2,parseInt(gid('cfgCycle').value)||4);if(getTimerState()==='idle'){setPhaseTime();renderTimerChrome()}saveState('user')}
+function toggleOpt(id){const el=gid(id);el.classList.toggle('on');const on=el.classList.contains('on');el.setAttribute('aria-checked',on?'true':'false');if(id==='togBreak')cfg.autoBreak=on;if(id==='togWork')cfg.autoWork=on;if(id==='togSound'){cfg.sound=on;if(running){if(cfg.sound)schedulePhaseAudio();else cancelScheduledAudio()}}if(id==='togLink')cfg.linkTask=on;if(id==='togNotif'){cfg.notif=on;if(cfg.notif)reqNotifPerm()}if(id==='togSnpNote')cfg.askSessionNote=on;saveState('user')}
 let settingsOpen=false;
 function toggleSettings(){
   const body=gid('settingsBody'),arrow=gid('settingsArrow');
@@ -29,7 +29,27 @@ window.addEventListener('resize',_reflowSettingsIfOpen,{passive:true});
 window.addEventListener('orientationchange',_reflowSettingsIfOpen);
 
 // ========== STATE ==========
-let cfg={work:25,short:5,long:15,cycle:4,autoBreak:true,autoWork:false,sound:true,linkTask:true,notif:true,timerSub:'pomo',hideHabitsInMainViews:true};
+let cfg={work:25,short:5,long:15,cycle:4,autoBreak:true,autoWork:false,sound:true,linkTask:true,notif:true,timerSub:'pomo',hideHabitsInMainViews:true,askSessionNote:true,focusListMode:false,phasePreset:'classic'};
+
+/** Named Pomodoro phase presets — applies to cfg.work/short/cycle on selection. */
+const PHASE_PRESETS = {
+  classic:    { work: 25, short: 5,  long: 15, cycle: 4, label: 'Classic 25/5' },
+  short:      { work: 15, short: 3,  long: 10, cycle: 4, label: 'Short 15/3' },
+  longfocus:  { work: 52, short: 17, long: 30, cycle: 2, label: 'Long focus 52/17' },
+  ultradian:  { work: 90, short: 20, long: 30, cycle: 1, label: 'Ultradian 90/20' },
+  deepwork:   { work: 120, short: 30, long: 60, cycle: 1, label: 'Deep work 120/30' },
+};
+function applyPhasePreset(name){
+  const p = PHASE_PRESETS[name];
+  if(!p || running) return;
+  cfg.work = p.work; cfg.short = p.short; cfg.long = p.long; cfg.cycle = p.cycle;
+  cfg.phasePreset = name;
+  const fields = [['cfgWork', p.work], ['cfgShort', p.short], ['cfgLong', p.long], ['cfgCycle', p.cycle]];
+  fields.forEach(([id, v])=>{ const el = gid(id); if(el) el.value = String(v); });
+  if(!finished){ setPhaseTime(); renderTimerChrome(); }
+  saveState('user');
+}
+window.applyPhasePreset = applyPhasePreset;
 let phase='work',pomosInCycle=0,totalPomos=0,totalBreaks=0,totalFocusSec=0;
 let totalDuration=0,remaining=0,running=false,finished=false;
 let startedAt=0,pausedRemaining=0,tickId=null;
@@ -44,8 +64,20 @@ let taskGroupBy='none',calMonth=null,theme='dark';
 let collapsedSections={};
 let timeLog=[],goals=[],goalIdCtr=0,logIdCtr=0;
 let swRunning=false,swStartTime=0,swElapsed=0,swPausedEl=0,swTickId=null,swLapList=[];
+let swFireCounts={},swScheduledIntervalNodes=[];
 let quickTimers=[],qtIdCtr=0,qtGlobalTick=null,qtUiRefreshId=null;
 let activeTab='tasks';
+
+// Single source of truth for the Pomodoro timer state. Pause-state (the trickiest
+// to detect) is "not running, not finished, but progress was made" — the IDLE/PAUSED
+// distinction wasn't being made before, which caused updateConfig to silently
+// reset paused timers.
+function getTimerState(){
+  if(running) return 'playing';
+  if(finished) return 'finished';
+  if(remaining < totalDuration) return 'paused';
+  return 'idle';
+}
 
 // ========== PHASE ==========
 function getPS(p){return p==='work'?cfg.work*60:p==='short'?cfg.short*60:cfg.long*60}
@@ -102,16 +134,20 @@ function tick(){
   const totalEl=totalDuration-remaining,circ=553;
   gid('ringFg').setAttribute('stroke-dashoffset',String(circ-(remaining/totalDuration)*circ));
   const disp=gid('display');disp.textContent=fmt(remaining);disp.className='ring-time'+(remaining<=10&&remaining>0?' warn':'');
-  intervals.forEach(iv=>{if(iv.intervalSec<=0)return;const exp=Math.floor(totalEl/iv.intervalSec),prev=fireCounts[iv.id]||0;if(exp>prev&&totalEl>0){if(cfg.sound&&!audioScheduled)playChime(iv.chime);fireCounts[iv.id]=exp;flashInt(iv.id)}});
+  intervals.forEach(iv=>{if(iv.intervalSec<=0)return;if((iv.target||'pomo')!=='pomo')return;const exp=Math.floor(totalEl/iv.intervalSec),prev=fireCounts[iv.id]||0;if(exp>prev&&totalEl>0){if(cfg.sound&&!audioScheduled)playChime(iv.chime);fireCounts[iv.id]=exp;flashInt(iv.id)}});
   if(remaining!==lastTickSec){lastTickSec=remaining;if(intervals.length)renderIntList();}
   renderBanner();updateTitle();updateMiniTimer();
   if(remaining<=0){running=false;finished=true;clearInterval(tickId);onPhaseComplete()}
 }
 function onPhaseComplete(){
+  let completedTaskIdForNote = null;
   if(phase==='work'){pomosInCycle++;totalPomos++;totalFocusSec+=totalDuration;sessionHistory.push({type:'work'});
     const pips=gid('pips').children;if(pips[pomosInCycle-1])pips[pomosInCycle-1].classList.add('done','pop');
-    if(activeTaskId&&taskStartedAt){const t=findTask(activeTaskId);if(t){t.totalSec+=Math.floor((Date.now()-taskStartedAt)/1000);t.sessions++;taskStartedAt=null;addLog(t.name,totalDuration,'work')}}else addLog('Focus',totalDuration,'work')
+    if(activeTaskId&&taskStartedAt){const t=findTask(activeTaskId);if(t){t.totalSec+=Math.floor((Date.now()-taskStartedAt)/1000);t.sessions++;taskStartedAt=null;addLog(t.name,totalDuration,'work');completedTaskIdForNote=t.id}}else addLog('Focus',totalDuration,'work')
   }else{totalBreaks++;sessionHistory.push({type:phase});addLog(getPL(phase),getPS(phase),phase)}
+  if(completedTaskIdForNote && cfg.askSessionNote && typeof showSessionNotePrompt === 'function'){
+    showSessionNotePrompt(completedTaskIdForNote);
+  }
   // Scheduled audio already fired at the right moment; only play manually if scheduling failed
   if(cfg.sound&&!audioScheduled)(phase==='work'?playTransition:playBreakEnd)();
   audioScheduled=false;scheduledAudio=[];
@@ -127,10 +163,47 @@ function skipPhase(){const wasRunning=running;running=false;clearInterval(tickId
 function resetAll(){running=false;finished=false;clearInterval(tickId);cancelScheduledAudio();phase='work';pomosInCycle=0;fireCounts={};if(activeTaskId&&taskStartedAt){const t=findTask(activeTaskId);if(t){t.totalSec+=Math.floor((Date.now()-taskStartedAt)/1000);taskStartedAt=null}}setPhaseTime();renderAll();saveState('user')}
 
 // ========== STOPWATCH ==========
-function swToggle(){if(swRunning){swRunning=false;swPausedEl+=Date.now()-swStartTime;gid('swStartBtn').textContent='Resume';gid('swStartBtn').className='btn btn-primary';maybeStopKeepalive()}else{swRunning=true;swStartTime=Date.now();clearInterval(swTickId);swTickId=setInterval(swTick,100);gid('swStartBtn').textContent='Pause';gid('swStartBtn').className='btn btn-pause';startKeepalive()}}
-function swTick(){if(!swRunning)return;swElapsed=swPausedEl+Date.now()-swStartTime;gid('swDisplay').textContent=fmtHMS(Math.floor(swElapsed/1000))}
+function swToggle(){
+  if(swRunning){
+    swRunning=false;swPausedEl+=Date.now()-swStartTime;
+    gid('swStartBtn').textContent='Resume';gid('swStartBtn').className='btn btn-primary';
+    cancelSwIntervalChimes(swScheduledIntervalNodes);
+    maybeStopKeepalive();
+  }else{
+    swRunning=true;swStartTime=Date.now();
+    clearInterval(swTickId);swTickId=setInterval(swTick,100);
+    gid('swStartBtn').textContent='Pause';gid('swStartBtn').className='btn btn-pause';
+    startKeepalive();
+    scheduleSwIntervalChimes(Math.floor(swElapsed/1000),intervals,swFireCounts,swScheduledIntervalNodes);
+  }
+}
+function swTick(){
+  if(!swRunning)return;
+  swElapsed=swPausedEl+Date.now()-swStartTime;
+  const elSec=Math.floor(swElapsed/1000);
+  gid('swDisplay').textContent=fmtHMS(elSec);
+  // Fire 'sw'-target repeating chimes (fallback play + flash)
+  let needsRender=false;
+  intervals.forEach(iv=>{
+    if(iv.intervalSec<=0)return;
+    if((iv.target||'pomo')!=='sw')return;
+    const exp=Math.floor(elSec/iv.intervalSec),prev=swFireCounts[iv.id]||0;
+    if(exp>prev&&elSec>0){
+      // Scheduled audio likely already played within the lookahead; only fall back if no nodes are pending
+      if(cfg.sound&&swScheduledIntervalNodes.length===0)playChime(iv.chime);
+      swFireCounts[iv.id]=exp;flashInt(iv.id);needsRender=true;
+    }
+  });
+  if(needsRender&&typeof renderIntList==='function')renderIntList();
+}
 function swLap(){if(swElapsed<=0)return;const s=Math.floor(swElapsed/1000),d=document.createElement('div');d.className='sw-lap';const s1=document.createElement('span');s1.textContent='Lap '+(swLapList.length+1);const s2=document.createElement('span');s2.textContent=fmtHMS(s);d.appendChild(s1);d.appendChild(s2);gid('swLaps').prepend(d);swLapList.push(s)}
-function swReset(){swRunning=false;swElapsed=0;swPausedEl=0;swLapList=[];clearInterval(swTickId);gid('swDisplay').textContent='00:00:00';gid('swStartBtn').textContent='Start';gid('swStartBtn').className='btn btn-primary';gid('swLaps').textContent='';maybeStopKeepalive()}
+function swReset(){
+  swRunning=false;swElapsed=0;swPausedEl=0;swLapList=[];swFireCounts={};
+  cancelSwIntervalChimes(swScheduledIntervalNodes);
+  clearInterval(swTickId);
+  gid('swDisplay').textContent='00:00:00';gid('swStartBtn').textContent='Start';gid('swStartBtn').className='btn btn-primary';gid('swLaps').textContent='';
+  maybeStopKeepalive();
+}
 
 // ========== QUICK TIMERS ==========
 function addQuickTimer(){
@@ -138,13 +211,13 @@ function addQuickTimer(){
   if(total<=0)return;
   const label=(gid('qtLabel').value||'').trim()||'Timer '+fmt(total);
   const sound=gid('qtSound').value;
-  quickTimers.push({id:++qtIdCtr,label,totalSec:total,remaining:total,running:false,startedAt:0,pausedRem:total,sound,finished:false});
+  quickTimers.push({id:++qtIdCtr,label,totalSec:total,remaining:total,running:false,startedAt:0,pausedRem:total,sound,finished:false,_fireCounts:{}});
   gid('qtLabel').value='';renderQuickTimers();saveState('user')
 }
 
 function addQuickPreset(mins,secs,label){
   const total=mins*60+secs;
-  quickTimers.push({id:++qtIdCtr,label,totalSec:total,remaining:total,running:false,startedAt:0,pausedRem:total,sound:'bell',finished:false});
+  quickTimers.push({id:++qtIdCtr,label,totalSec:total,remaining:total,running:false,startedAt:0,pausedRem:total,sound:'bell',finished:false,_fireCounts:{}});
   renderQuickTimers();saveState('user')
 }
 
@@ -152,7 +225,7 @@ function toggleQuickTimer(id){
   const qt=quickTimers.find(t=>t.id===id);
   if(!qt)return;
   if(qt.finished){
-    qt.remaining=qt.totalSec;qt.pausedRem=qt.totalSec;qt.finished=false;qt.running=true;qt.startedAt=Date.now();
+    qt.remaining=qt.totalSec;qt.pausedRem=qt.totalSec;qt.finished=false;qt.running=true;qt.startedAt=Date.now();qt._fireCounts={};
     reqNotifPerm();scheduleQtAudio(qt);startKeepalive();
   }else if(qt.running){
     const el=Math.floor((Date.now()-qt.startedAt)/1000);
@@ -177,7 +250,7 @@ function resetQuickTimer(id){
   const qt=quickTimers.find(t=>t.id===id);
   if(!qt)return;
   cancelQtAudio(qt);
-  qt.running=false;qt.finished=false;qt.remaining=qt.totalSec;qt.pausedRem=qt.totalSec;qt.flashUntil=0;
+  qt.running=false;qt.finished=false;qt.remaining=qt.totalSec;qt.pausedRem=qt.totalSec;qt.flashUntil=0;qt._fireCounts={};
   renderQuickTimers();saveState('user')
 }
 
@@ -204,11 +277,34 @@ function scheduleQtAudio(qt){
       qt._nodes.push(o);
     });
     qt._audioScheduled=true;
+    // Pre-schedule 'quick'-target repeating-chime intervals during this run
+    qt._intervalNodes=qt._intervalNodes||[];
+    const totalEl=qt.totalSec-qt.remaining;
+    intervals.forEach(iv=>{
+      if(iv.intervalSec<=0)return;
+      if((iv.target||'pomo')!=='quick')return;
+      const alreadyFired=(qt._fireCounts&&qt._fireCounts[iv.id])||0;
+      const ic=CH[iv.chime]||CH.bell;
+      for(let n=alreadyFired+1;n*iv.intervalSec<qt.totalSec;n++){
+        const d=n*iv.intervalSec-totalEl;
+        if(d<=0||d>=qt.remaining)continue;
+        const ibase=x.currentTime+d;
+        ic.freq.forEach((f,i)=>{
+          const o=x.createOscillator(),g=x.createGain(),t=ibase+i*.05;
+          o.type=ic.type;o.frequency.setValueAtTime(f,t);
+          g.gain.setValueAtTime(.25,t);g.gain.exponentialRampToValueAtTime(.001,t+ic.decay);
+          o.connect(g);g.connect(x.destination);
+          o.start(t);o.stop(t+ic.decay+.1);
+          qt._intervalNodes.push(o);
+        });
+      }
+    });
   }catch(e){}
 }
 
 function cancelQtAudio(qt){
   if(qt._nodes){qt._nodes.forEach(o=>{try{o.stop(0)}catch(e){}});qt._nodes=[]}
+  if(qt._intervalNodes){qt._intervalNodes.forEach(o=>{try{o.stop(0)}catch(e){}});qt._intervalNodes=[]}
   qt._audioScheduled=false;
 }
 
@@ -235,6 +331,20 @@ function ensureQuickTick(){
       const el=Math.floor((Date.now()-qt.startedAt)/1000);
       const newRem=Math.max(0,qt.pausedRem-el);
       if(newRem!==qt.remaining){qt.remaining=newRem;needsRender=true}
+      // Fire 'quick'-target repeating chimes (fallback play + flash)
+      if(newRem>0){
+        const totalEl=qt.totalSec-newRem;
+        if(!qt._fireCounts)qt._fireCounts={};
+        intervals.forEach(iv=>{
+          if(iv.intervalSec<=0)return;
+          if((iv.target||'pomo')!=='quick')return;
+          const exp=Math.floor(totalEl/iv.intervalSec),prev=qt._fireCounts[iv.id]||0;
+          if(exp>prev&&totalEl>0){
+            if(cfg.sound&&!qt._audioScheduled)playChime(iv.chime);
+            qt._fireCounts[iv.id]=exp;flashInt(iv.id);needsRender=true;
+          }
+        });
+      }
       if(newRem<=0&&!qt.finished){
         qt.running=false;qt.finished=true;qt.pausedRem=0;
         // Scheduled audio already played; fall back to manual play only if scheduling failed
@@ -282,8 +392,74 @@ function renderQuickTimers(){
 }
 
 // ========== INTERVALS ==========
-function addInterval(){const m=parseInt(gid('intMin').value)||0,s=parseInt(gid('intSec').value)||0,sec=m*60+s;if(sec<=0)return;intervals.push({id:++intIdCtr,intervalSec:sec,label:gid('intLabel').value||'Every '+fmt(sec),chime:gid('intChime').value});gid('intLabel').value='';gid('intMin').value='5';gid('intSec').value='0';renderIntList();if(running)schedulePhaseAudio();saveState('user')}
-function removeInterval(id){intervals=intervals.filter(i=>i.id!==id);delete fireCounts[id];renderIntList();if(running)schedulePhaseAudio();saveState('user')}
+function _rescheduleAffectedChimes(target){
+  if(target==='pomo'){
+    if(running)schedulePhaseAudio();
+  }else if(target==='quick'){
+    quickTimers.forEach(qt=>{if(qt.running){cancelQtAudio(qt);scheduleQtAudio(qt)}});
+  }else if(target==='sw'){
+    cancelSwIntervalChimes(swScheduledIntervalNodes);
+    if(swRunning)scheduleSwIntervalChimes(Math.floor(swElapsed/1000),intervals,swFireCounts,swScheduledIntervalNodes);
+  }
+}
+function addInterval(){const m=parseInt(gid('intMin').value)||0,s=parseInt(gid('intSec').value)||0,sec=m*60+s;if(sec<=0)return;const tgt=gid('intTarget')?gid('intTarget').value:'pomo';intervals.push({id:++intIdCtr,intervalSec:sec,label:gid('intLabel').value||'Every '+fmt(sec),chime:gid('intChime').value,target:tgt});gid('intLabel').value='';gid('intMin').value='5';gid('intSec').value='0';renderIntList();_rescheduleAffectedChimes(tgt);saveState('user')}
+function removeInterval(id){const iv=intervals.find(i=>i.id===id),tgt=iv?(iv.target||'pomo'):null;intervals=intervals.filter(i=>i.id!==id);delete fireCounts[id];delete swFireCounts[id];quickTimers.forEach(qt=>{if(qt._fireCounts)delete qt._fireCounts[id]});renderIntList();if(tgt)_rescheduleAffectedChimes(tgt);saveState('user')}
 function flashInt(id){lastFlash=id;setTimeout(()=>{if(lastFlash===id){lastFlash=null;renderIntList()}},600);renderIntList()}
-function renderIntList(){const list=gid('intList');gid('intCount').textContent=intervals.length+' set';list.querySelectorAll('.iitem').forEach(e=>e.remove());if(!intervals.length){gid('intEmpty').style.display='';return}gid('intEmpty').style.display='none';const totalEl=totalDuration-remaining;intervals.forEach(iv=>{const fires=fireCounts[iv.id]||0,fl=lastFlash===iv.id,next=(fires+1)*iv.intervalSec-totalEl;const d=document.createElement('div');d.className='iitem'+(fl?' flash':'');const dot=document.createElement('div');dot.className='idot'+(fl?' flash':fires>0?' active':'');d.appendChild(dot);const info=document.createElement('div');info.className='iinfo';const nm=document.createElement('div');nm.className='iname';nm.textContent=iv.label;info.appendChild(nm);const meta=document.createElement('div');meta.className='imeta';meta.textContent='⟳ every '+fmt(iv.intervalSec)+' · '+CHL[iv.chime];info.appendChild(meta);d.appendChild(info);if(running||finished){const st=document.createElement('div');st.className='istat';const fc=document.createElement('div');fc.className='ifires'+(fl?' flash':'');fc.textContent=fires+'×';st.appendChild(fc);if(next>0&&running){const nx=document.createElement('div');nx.className='inext';nx.textContent='next '+fmt(next);st.appendChild(nx)}d.appendChild(st)}const rm=document.createElement('button');rm.className='irm';rm.textContent='×';rm.onclick=function(){removeInterval(iv.id)};d.appendChild(rm);list.appendChild(d)})}
+function _intFireState(iv){
+  const tgt=iv.target||'pomo';
+  if(tgt==='pomo'){
+    const fires=fireCounts[iv.id]||0;
+    const totalEl=totalDuration-remaining;
+    const next=running?(fires+1)*iv.intervalSec-totalEl:0;
+    return {fires,next,active:running||finished};
+  }
+  if(tgt==='sw'){
+    const fires=swFireCounts[iv.id]||0;
+    const totalEl=Math.floor(swElapsed/1000);
+    const next=swRunning?(fires+1)*iv.intervalSec-totalEl:0;
+    return {fires,next,active:swRunning||swElapsed>0};
+  }
+  // quick: aggregate across all quick timers (they share the interval definition)
+  let fires=0,nextMin=Infinity,anyRunning=false;
+  quickTimers.forEach(qt=>{
+    const f=(qt._fireCounts&&qt._fireCounts[iv.id])||0;
+    fires+=f;
+    if(qt.running){
+      anyRunning=true;
+      const el=Math.floor((Date.now()-qt.startedAt)/1000);
+      const totalEl=qt.totalSec-Math.max(0,qt.pausedRem-el);
+      const n=(f+1)*iv.intervalSec-totalEl;
+      if(n>0&&n<nextMin)nextMin=n;
+    }
+  });
+  return {fires,next:anyRunning&&nextMin!==Infinity?nextMin:0,active:anyRunning};
+}
+function renderIntList(){
+  const list=gid('intList');
+  gid('intCount').textContent=intervals.length+' set';
+  list.querySelectorAll('.iitem').forEach(e=>e.remove());
+  if(!intervals.length){gid('intEmpty').style.display='';return}
+  gid('intEmpty').style.display='none';
+  intervals.forEach(iv=>{
+    const tgt=iv.target||'pomo';
+    const {fires,next,active}=_intFireState(iv);
+    const fl=lastFlash===iv.id;
+    const d=document.createElement('div');d.className='iitem'+(fl?' flash':'');
+    const dot=document.createElement('div');dot.className='idot'+(fl?' flash':fires>0?' active':'');d.appendChild(dot);
+    const info=document.createElement('div');info.className='iinfo';
+    const nm=document.createElement('div');nm.className='iname';nm.textContent=iv.label;info.appendChild(nm);
+    const meta=document.createElement('div');meta.className='imeta';
+    meta.textContent='⟳ every '+fmt(iv.intervalSec)+' · '+CHL[iv.chime]+' · '+(TARG_LBL[tgt]||tgt);
+    info.appendChild(meta);
+    d.appendChild(info);
+    if(active){
+      const st=document.createElement('div');st.className='istat';
+      const fc=document.createElement('div');fc.className='ifires'+(fl?' flash':'');fc.textContent=fires+'×';st.appendChild(fc);
+      if(next>0){const nx=document.createElement('div');nx.className='inext';nx.textContent='next '+fmt(next);st.appendChild(nx)}
+      d.appendChild(st);
+    }
+    const rm=document.createElement('button');rm.className='irm';rm.textContent='×';rm.onclick=function(){removeInterval(iv.id)};d.appendChild(rm);
+    list.appendChild(d);
+  });
+}
 

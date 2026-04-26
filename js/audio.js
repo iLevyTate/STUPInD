@@ -1,6 +1,7 @@
 // ========== AUDIO ==========
 const CH={bell:{freq:[880,1108,1320],type:"sine",decay:.8},ping:{freq:[1200],type:"sine",decay:.3},buzz:{freq:[220,223],type:"sawtooth",decay:.5},chord:{freq:[523,659,784],type:"triangle",decay:1},alarm:{freq:[600,900],type:"square",decay:.6}};
 const CHL={bell:"Bell",ping:"Ping",buzz:"Buzz",chord:"Chord",alarm:"Alarm"};
+const TARG_LBL={pomo:"Pomodoro",quick:"Quick",sw:"Stopwatch"};
 let _audioCtx=null;
 function getAudioCtx(){if(!_audioCtx||_audioCtx.state==='closed')_audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(_audioCtx.state==='suspended')_audioCtx.resume();return _audioCtx}
 
@@ -28,9 +29,9 @@ function startKeepalive(){
   if('mediaSession' in navigator){
     try{
       navigator.mediaSession.metadata=new MediaMetadata({
-        title:'ODTAULAI Focus Timer',
+        title:'OdTauLai Focus Timer',
         artist:'Pomodoro session in progress',
-        album:'ODTAULAI'
+        album:'OdTauLai'
       });
       navigator.mediaSession.playbackState='playing';
       navigator.mediaSession.setActionHandler('pause',()=>{if(running)pauseTimer()});
@@ -118,15 +119,55 @@ function cancelScheduledAudio(){
   scheduledAudio=[];audioScheduled=false;
 }
 
+// Bounded lookahead pre-scheduler for the (open-ended) stopwatch.
+// startElapsedSec = current stopwatch elapsed seconds at scheduling time.
+// Caps at min(SW_LOOKAHEAD_SEC, SW_MAX_FIRES_PER_INTERVAL) per interval.
+const SW_LOOKAHEAD_SEC=3600,SW_MAX_FIRES_PER_INTERVAL=200;
+function scheduleSwIntervalChimes(startElapsedSec,intervalsList,fireCounts,nodesOut){
+  if(!cfg.sound)return;
+  try{
+    const x=getAudioCtx();
+    intervalsList.forEach(iv=>{
+      if(iv.intervalSec<=0)return;
+      if((iv.target||'pomo')!=='sw')return;
+      const c=CH[iv.chime]||CH.bell;
+      const alreadyFired=(fireCounts&&fireCounts[iv.id])||0;
+      let scheduled=0;
+      for(let n=alreadyFired+1;scheduled<SW_MAX_FIRES_PER_INTERVAL;n++){
+        const fireAt=n*iv.intervalSec;
+        const delay=fireAt-startElapsedSec;
+        if(delay<=0)continue;
+        if(delay>SW_LOOKAHEAD_SEC)break;
+        const base=x.currentTime+delay;
+        c.freq.forEach((f,i)=>{
+          const o=x.createOscillator(),g=x.createGain(),t=base+i*.05;
+          o.type=c.type;o.frequency.setValueAtTime(f,t);
+          g.gain.setValueAtTime(.25,t);g.gain.exponentialRampToValueAtTime(.001,t+c.decay);
+          o.connect(g);g.connect(x.destination);
+          o.start(t);o.stop(t+c.decay+.1);
+          nodesOut.push(o);
+        });
+        scheduled++;
+      }
+    });
+  }catch(e){}
+}
+function cancelSwIntervalChimes(nodesOut){
+  if(!nodesOut)return;
+  nodesOut.forEach(o=>{try{o.stop(0)}catch(e){}});
+  nodesOut.length=0;
+}
+
 function schedulePhaseAudio(){
   cancelScheduledAudio();
   if(!cfg.sound)return;
   // Schedule phase-end completion chime
   if(phase==='work')scheduleTransitionAudio(remaining);
   else scheduleBreakEndAudio(remaining);
-  // Schedule all remaining interval chimes
+  // Schedule all remaining interval chimes (Pomodoro-targeted only)
   intervals.forEach(iv=>{
     if(iv.intervalSec<=0)return;
+    if((iv.target||'pomo')!=='pomo')return;
     const totalEl=totalDuration-remaining;
     const alreadyFired=fireCounts[iv.id]||0;
     for(let n=alreadyFired+1;n*iv.intervalSec<=totalDuration;n++){
