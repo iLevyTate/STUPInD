@@ -733,11 +733,11 @@ function renderBoard(visibleTasks){
       const time=getRolledUpTime(t.id)>0?'<span class="task-elapsed" style="font-size:10px">'+fmtHMS(getRolledUpTime(t.id))+'</span>':'';
       card.innerHTML=breadcrumb
         +'<div class="board-card-name">'+esc(t.name)+'</div>'
-        +'<div class="board-card-meta" style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">'+due+tags+time+'</div>';
+        +'<div class="board-card-meta">'+due+tags+time+'</div>';
       body.appendChild(card)
     });
     if(!colTasks.length){
-      const empty=document.createElement('div');empty.style.cssText='font-size:12px;color:var(--text-4);text-align:center;padding:24px 0';
+      const empty=document.createElement('div');empty.className='board-col-empty';
       empty.textContent='Drop tasks here';body.appendChild(empty);
     }
     board.appendChild(col)

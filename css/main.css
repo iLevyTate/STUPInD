@@ -5,7 +5,7 @@
   /* M5: 100vh on mobile Safari reports the *maximum* visible area including the
      address bar, which pushes content behind the toolbar. Prefer 100dvh (dynamic
      viewport) and fall back to 100vh for browsers that don't support dvh. */
-  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:24px 16px 60px;background:var(--bg-0);color:var(--text-1);font-family:var(--font-sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:24px 16px 88px;background:var(--bg-0);color:var(--text-1);font-family:var(--font-sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
   button{cursor:pointer;font-family:inherit;border:none;-webkit-tap-highlight-color:transparent}button:hover{filter:brightness(1.12)}
   /* Keyboard-focus outline tracks the element's rounded corners instead of
      rendering a sharp rectangle on rounded controls. */
@@ -134,6 +134,7 @@
   .srow{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
   .sr-lbl{font-size:10px;color:#6a8aaa;letter-spacing:1px;min-width:120px}
   .sinput{width:56px;padding:6px 8px;background:#0d1a28;border:1px solid #1a2840;border-radius:6px;color:#c8d6e5;font-size:13px;font-family:inherit;text-align:center;outline:0}
+  select.sinput{width:auto;min-width:100px;text-align:left;padding-right:24px;text-overflow:ellipsis}
   .sunit{font-size:10px;color:#4a6a8a}
   .toggle{width:36px;height:20px;border-radius:10px;background:#1a2a3a;position:relative;cursor:pointer;transition:.2s;border:1px solid #2a3a4a}
   .toggle.on{background:#1a4a6a;border-color:#2a6a9a}
@@ -361,8 +362,9 @@
   .board-card.priority-high-card{border-left-color:#e67e22}
   .board-card.priority-normal-card{border-left-color:#3d8bcc}
   .board-card.priority-low-card{border-left-color:#7f8c8d}
-  .board-card-name{font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:4px}
-  .board-card-meta{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+  .board-card-name{font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+  .board-card-meta{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .board-col-empty{font-size:12px;color:var(--text-4,#4a5668);text-align:center;padding:24px 0;font-style:italic}
 
   /* Small "today" badge */
   .due-today-banner{font-size:9px;padding:2px 8px;background:rgba(232,168,56,.15);color:#e8a838;border:1px solid #5a4a1a;border-radius:10px;letter-spacing:.5px}
@@ -789,7 +791,7 @@
   .board-col{background:var(--bg-1);border-color:var(--border);border-radius:var(--r-lg)}
   .board-card{background:var(--bg-2);border-color:var(--border);border-radius:var(--r-md);padding:10px 12px}
   .board-card:hover{background:var(--bg-3);border-color:var(--border-strong)}
-  .board-card-name{font-size:13px;color:var(--text-1);font-weight:500;line-height:1.35}
+  .board-card-name{font-size:13px;color:var(--text-1);font-weight:500;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
   .board-card.priority-urgent-card{border-left-color:var(--danger)}
   .board-card.priority-high-card{border-left-color:var(--warning)}
   .board-card.priority-normal-card{border-left-color:var(--accent)}
@@ -1383,8 +1385,9 @@
     .board-col{min-width:78vw!important;width:78vw!important;max-width:78vw!important;scroll-snap-align:start;flex-shrink:0}
     .board-col-hdr{padding:10px 12px}
     .board-card{padding:10px 12px}
-    .board-card-name{font-size:13px}
+    .board-card-name{font-size:13px;-webkit-line-clamp:3}
     .board-col-body{padding:8px}
+    .hm-grid{max-width:220px}
 
     /* Pomodoro timer card — smaller ring */
     .ring-wrap{width:180px;height:180px}
@@ -1429,6 +1432,7 @@
     .srow{flex-wrap:wrap;gap:8px;padding:12px 0}
     .sr-lbl{font-size:14px;flex:1;min-width:0}
     .sinput{min-height:44px;font-size:16px!important;width:72px!important;text-align:center}
+    select.sinput{width:auto!important;min-width:100px;text-align:left;padding-right:24px!important;text-overflow:ellipsis}
     .toggle{width:42px;height:24px;flex-shrink:0}
     .toggle .tknob{width:18px;height:18px}
     .toggle.on .tknob{left:21px}
@@ -1556,7 +1560,8 @@
     /* === REPEATING CHIMES: label input needs full width === */
     .iform{flex-wrap:wrap;gap:6px;align-items:flex-end}
     .iform > div:first-child,.iform > div:first-child[style]{flex:1 1 100%!important}
-    .iform > div:not(:first-child){flex:0 1 auto}
+    .iform > div:not(:first-child){flex:1 1 auto}
+    .iform select.fi-s{width:100%!important;padding-right:24px!important;text-overflow:ellipsis;min-width:90px}
     .iprev{width:40px;height:40px;min-width:40px}
     .iform .iadd{min-height:40px!important;padding:9px 16px!important;flex:0 1 auto;white-space:nowrap}
 
@@ -2132,11 +2137,16 @@
 .pending-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 
 /* ── Smart Add (ambient AI on task input) ── */
-.task-input-wrap{position:relative;flex:1;display:flex;align-items:center}
-.task-input-wrap .task-input{flex:1;padding-right:44px}
-.task-enhance-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(61,139,204,.12);border:1px solid rgba(61,139,204,.3);border-radius:6px;padding:4px 8px;font-size:14px;color:var(--accent);cursor:pointer;transition:background .15s,transform .1s;line-height:1}
-.task-enhance-btn:hover{background:rgba(61,139,204,.2);transform:translateY(-50%) scale(1.08)}
+.task-input-wrap{position:relative;flex:1;display:flex;align-items:center;gap:4px;
+  background:var(--bg-1,#0a1320);border:1px solid var(--border,#152238);border-radius:8px;padding-right:4px;overflow:hidden}
+.task-input-wrap .task-input{flex:1;min-width:0;padding:9px 8px 9px 12px!important;background:transparent!important;border:none!important;color:inherit;font-size:inherit;font-family:inherit;outline:0;border-radius:0!important;text-overflow:ellipsis}
+.task-input-wrap .task-input::placeholder{color:var(--text-3,#2a3a4a)}
+.task-enhance-btn{flex-shrink:0;background:rgba(61,139,204,.12);border:1px solid rgba(61,139,204,.3);border-radius:6px;padding:4px 8px;font-size:14px;color:var(--accent);cursor:pointer;transition:background .15s,transform .1s;line-height:1}
+.task-enhance-btn:hover{background:rgba(61,139,204,.2);transform:scale(1.08)}
 .task-enhance-btn:disabled{opacity:.6;cursor:wait}
+/* Voice button active/recording state */
+.task-voice-btn.on{background:rgba(231,76,60,.18);border-color:rgba(231,76,60,.5);color:#e74c3c;animation:voice-pulse 1.2s ease-in-out infinite}
+@keyframes voice-pulse{0%,100%{box-shadow:0 0 0 0 rgba(231,76,60,.3)}50%{box-shadow:0 0 0 6px rgba(231,76,60,0)}}
 .smart-add-preview{margin-top:6px;padding:8px 10px;background:rgba(61,139,204,.06);border:1px solid rgba(61,139,204,.2);border-radius:8px;display:flex;flex-direction:column;gap:6px}
 .smart-add-hint{font-size:10px;color:var(--text-3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
 .smart-add-empty{font-size:12px;color:var(--text-3);font-style:italic}
@@ -2263,7 +2273,7 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
 /* Mobile tweaks */
 @media (max-width:640px){
   .update-banner,.quota-warning{
-    bottom:auto;top:60px;left:8px;right:8px;transform:none;
+    bottom:auto;top:110px;left:8px;right:8px;transform:none;
     flex-wrap:wrap;max-width:none;
   }
   .offline-indicator{font-size:11px}
@@ -2736,7 +2746,7 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
 .streak-num{font-size:28px;font-weight:700;color:var(--accent,#48b5e0);line-height:1;font-variant-numeric:tabular-nums}
 .streak-lbl{font-size:12px;color:var(--text-2)}
 .streak-best{margin-left:auto;font-size:11px;color:var(--text-3)}
-.hm-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;max-width:240px}
+.hm-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;width:100%;max-width:260px;margin:0 auto}
 .hm-cell{display:block;aspect-ratio:1;border-radius:2px;background:var(--border)}
 .hm-l1{background:rgba(72,181,224,.25)}
 .hm-l2{background:rgba(72,181,224,.5)}
@@ -2756,7 +2766,7 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
 .app-focus-list .smart-views,
 .app-focus-list .lists-bar,
 .app-focus-list .today-banner{display:none !important}
-.app-focus-list .nav-tabs::after{content:"focus-list";position:absolute;right:12px;font-size:10px;color:var(--text-3);letter-spacing:.08em;text-transform:uppercase}
+/* removed focus-list absolute badge to prevent UI overlap with the Menu button */
 
 /* ───── G-18 today-view calendar events ───── */
 .today-cal-events{margin:8px 0 4px;padding:8px 10px;background:var(--card-2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:var(--r-sm,6px)}
@@ -2800,7 +2810,7 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
 }
 
 /* ───── G-12 voice button styling ───── */
-.task-voice-btn{position:absolute;right:80px}
+.task-voice-btn{}
 .task-voice-btn.on{color:#e74c3c;animation:pulseVoice 1.2s ease-in-out infinite}
 @keyframes pulseVoice{0%,100%{opacity:1}50%{opacity:.55}}
 @media (prefers-reduced-motion: reduce){
@@ -2825,3 +2835,53 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
 .share-in-banner{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1300;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(72,181,224,.12);color:var(--accent,#48b5e0);border:1px solid rgba(72,181,224,.4);border-radius:999px;font-size:12px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.4);max-width:calc(100vw - 32px)}
 .share-in-x{background:transparent;border:none;color:inherit;font-size:14px;cursor:pointer;padding:0 4px;opacity:.7}
 .share-in-x:hover{opacity:1}
+
+/* Checklist & Related tasks styling */
+.mclg-group {
+  display:flex;flex-direction:column;gap:6px;margin-bottom:12px;
+  background:var(--bg-2, rgba(255,255,255,.02));border:1px solid var(--border);border-radius:8px;padding:8px;
+}
+.mclg-head { display:flex;align-items:center;gap:8px; }
+.mclg-name { flex:1; background:transparent; border:none; color:var(--text-1); font-weight:600; font-size:14px; outline:none; }
+.mclg-rm { background:transparent; border:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0 4px; }
+.mclg-items { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:4px; }
+.mclg-items li { display:flex; align-items:center; gap:8px; }
+.mclg-item-cb { accent-color:var(--accent); width:16px; height:16px; cursor:pointer; }
+.mclg-item-txt { flex:1; background:var(--bg-1); border:1px solid var(--border); border-radius:4px; color:var(--text-1); padding:4px 8px; font-size:13px; }
+.mclg-item-txt.done { text-decoration:line-through; color:var(--text-3); opacity:0.7; }
+.mclg-item-x { background:transparent; border:none; color:var(--text-3); cursor:pointer; font-size:14px; padding:0 4px; }
+.mclg-item-x:hover { color:var(--danger); }
+
+/* Ghost Action Buttons */
+.mclg-add-group, .mclg-add, .related-add {
+  font-family: inherit;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(61,139,204,.12);border:1px solid rgba(61,139,204,.3);border-radius:6px;
+  padding:6px 12px;font-size:13px;color:var(--accent);cursor:pointer;
+  transition:background .15s,transform .1s;line-height:1;
+  font-weight:500;margin-top:4px;align-self:flex-start;
+}
+.mclg-add-group:hover, .mclg-add:hover, .related-add:hover {
+  background:rgba(61,139,204,.2);transform:scale(1.02)
+}
+.mclg-add-group:active, .mclg-add:active, .related-add:active {
+  transform:scale(0.98)
+}
+
+.md-related {
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px;
+}
+.related-chip {
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--bg-2);border:1px solid var(--border);border-radius:6px;
+  padding:4px 8px;font-size:13px;color:var(--text-1);cursor:pointer;transition:background .15s;
+}
+.related-chip:hover {
+  background:var(--bg-3, var(--bg-2));border-color:var(--accent-border, var(--border));
+}
+.related-x {
+  color:var(--danger);font-weight:bold;cursor:pointer;font-size:14px;line-height:1;
+}
+.related-x:hover {
+  filter:brightness(1.5);
+}
