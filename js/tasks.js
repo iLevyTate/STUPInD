@@ -794,11 +794,19 @@ function checkReminders(){
       const title=(late?'Missed: ':'Task reminder: ')+t.name;
       if('Notification' in window&&Notification.permission==='granted'){
         try{
-          const n=new Notification(title,{
-            body:t.dueDate?'Due '+fmtDue(t.dueDate):'No due date',
-            tag:'task-'+t.id,requireInteraction:true
-          });
-          n.onclick=function(){window.focus();showTab('tasks');openTaskDetail(t.id);n.close()};
+          if(typeof notify === 'function'){
+            notify(title, t.dueDate?'Due '+fmtDue(t.dueDate):'No due date', {
+              tag: 'task-'+t.id,
+              requireInteraction: true,
+              data: { action: 'openTask', taskId: t.id },
+            });
+          } else {
+            const n=new Notification(title,{
+              body:t.dueDate?'Due '+fmtDue(t.dueDate):'No due date',
+              tag:'task-'+t.id,requireInteraction:true
+            });
+            n.onclick=function(){window.focus();showTab('tasks');openTaskDetail(t.id);n.close()};
+          }
         }catch(e){ console.warn('[tasks] Notification failed for task', t.id, e); }
       }else if(cfg.sound){playChime('bell')}
     }

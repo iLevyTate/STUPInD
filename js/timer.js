@@ -453,3 +453,60 @@ function renderIntList(){
   });
 }
 
+// ========== BACKGROUND WORKER SUPPORT ==========
+// Called from the inline Web Worker (audio.js) every 1s — drives quick-timer
+// logic when the main-thread setInterval is throttled by the browser.
+function _bgQuickTick(){
+  let anyRunning=false,needsRender=false;
+  quickTimers.forEach(qt=>{
+    if(!qt.running)return;
+    anyRunning=true;
+    const el=Math.floor((Date.now()-qt.startedAt)/1000);
+    const newRem=Math.max(0,qt.pausedRem-el);
+    if(newRem!==qt.remaining){qt.remaining=newRem;needsRender=true}
+    if(newRem>0){
+      const totalEl=qt.totalSec-newRem;
+      if(!qt._fireCounts)qt._fireCounts={};
+      intervals.forEach(iv=>{
+        if(iv.intervalSec<=0)return;
+        if((iv.target||'pomo')!=='quick')return;
+        const exp=Math.floor(totalEl/iv.intervalSec),prev=qt._fireCounts[iv.id]||0;
+        if(exp>prev&&totalEl>0){
+          if(cfg.sound&&!qt._audioScheduled)playChime(iv.chime);
+          qt._fireCounts[iv.id]=exp;flashInt(iv.id);needsRender=true;
+        }
+      });
+    }
+    if(newRem<=0&&!qt.finished){
+      qt.running=false;qt.finished=true;qt.pausedRem=0;
+      if(cfg.sound&&!qt._audioScheduled)playChime(qt.sound);
+      qt._audioScheduled=false;qt._nodes=[];
+      notify('Timer done',qt.label);
+      qt.flashUntil=Date.now()+2000;
+      addLog(qt.label,qt.totalSec,'quick');
+      needsRender=true;saveState('auto');
+    }
+  });
+  if(needsRender&&!document.hidden)renderQuickTimers();
+}
+window._bgQuickTick=_bgQuickTick;
+
+/**
+ * Reconcile timer state after waking from a backgrounded/suspended tab.
+ * If a Pomodoro phase should have completed while the page was hidden,
+ * calling tick() once will catch up (because tick is wall-clock based,
+ * not delta based). If the timer finished while hidden, we fire the
+ * completion flow now.
+ */
+function _reconcileTimerAfterWake(){
+  if(running){
+    try{tick()}catch(e){}
+  }
+}
+window._reconcileTimerAfterWake=_reconcileTimerAfterWake;
+
+// Expose tick and swTick so the background Worker in audio.js can call them
+window.tick=tick;
+window.swTick=swTick;
+
+

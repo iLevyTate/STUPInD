@@ -1,5 +1,5 @@
 // OdTauLai Service Worker — keep CACHE_NAME aligned with js/version.js swCache
-const CACHE_NAME = 'odtaulai-v34';
+const CACHE_NAME = 'odtaulai-v38';
 
 const ASSETS = [
   './',
@@ -101,14 +101,42 @@ self.addEventListener('fetch', e => {
 
 self.addEventListener('message', e => {
   if(e.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  // ── Persistent notification from main thread ──
+  // ServiceWorker.showNotification() fires even when the page tab is frozen
+  // or backgrounded on mobile — unlike `new Notification()` from the main
+  // thread which requires the page to be active.
+  if(e.data?.type === 'SHOW_NOTIFICATION'){
+    const d = e.data;
+    e.waitUntil(
+      self.registration.showNotification(d.title || 'OdTauLai', {
+        body:               d.body || '',
+        tag:                d.tag || 'odtaulai',
+        renotify:           d.renotify !== false,
+        icon:               './icons/icon-192.png',
+        badge:              './icons/icon-192.png',
+        silent:             !!d.silent,
+        requireInteraction: !!d.requireInteraction,
+        data:               d.data || {},
+      })
+    );
+  }
 });
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const data = e.notification.data || {};
+  const target = data.url || './';
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
-      for(const c of clients){ if('focus' in c) return c.focus(); }
-      if(self.clients.openWindow) return self.clients.openWindow('./');
+      // If the app is already open, focus it and forward the notification data
+      for(const c of clients){
+        if('focus' in c){
+          c.postMessage({ type: 'NOTIFICATION_CLICK', data });
+          return c.focus();
+        }
+      }
+      // App isn't open — launch it (with optional target path)
+      if(self.clients.openWindow) return self.clients.openWindow(target);
     })
   );
 });

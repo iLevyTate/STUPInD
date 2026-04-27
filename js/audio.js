@@ -23,9 +23,7 @@ function startKeepalive(){
     _keepaliveGain.connect(x.destination);
     _keepaliveNode.start();
   }catch(e){}
-  if('wakeLock' in navigator){
-    navigator.wakeLock.request('screen').then(l=>{_wakeLock=l}).catch(()=>{});
-  }
+  _acquireWakeLock();
   if('mediaSession' in navigator){
     try{
       navigator.mediaSession.metadata=new MediaMetadata({
@@ -59,6 +57,24 @@ function updateBgAudioStatus(){
   }
 }
 let _wakeLock=null;
+
+/**
+ * Acquire the Screen Wake Lock. Extracted so it can be called both from
+ * startKeepalive() and from the visibilitychange handler (the browser
+ * automatically releases the lock when a page becomes hidden, so we must
+ * re-acquire it every time the page becomes visible again while a timer
+ * is active).
+ */
+function _acquireWakeLock(){
+  if(_wakeLock) return; // already held
+  if(!('wakeLock' in navigator)) return;
+  navigator.wakeLock.request('screen').then(l=>{
+    _wakeLock=l;
+    // When the OS releases the lock (e.g. page hidden), null it out so
+    // re-acquire on visibilitychange works correctly.
+    l.addEventListener('release', ()=>{ _wakeLock=null; });
+  }).catch(()=>{});
+}
 
 function playChime(t){try{const x=getAudioCtx(),c=CH[t]||CH.bell;c.freq.forEach((f,i)=>{const o=x.createOscillator(),g=x.createGain();o.type=c.type;o.frequency.setValueAtTime(f,x.currentTime);g.gain.setValueAtTime(.25,x.currentTime);g.gain.exponentialRampToValueAtTime(.001,x.currentTime+c.decay);o.connect(g);g.connect(x.destination);o.start(x.currentTime+i*.05);o.stop(x.currentTime+c.decay+.1)})}catch(e){}}
 function playTransition(){try{const x=getAudioCtx();[0,.12,.24,.36].forEach((d,i)=>{const fr=[523,659,784,1047][i],o=x.createOscillator(),g=x.createGain();o.type="sine";o.frequency.setValueAtTime(fr,x.currentTime+d);g.gain.setValueAtTime(.3,x.currentTime+d);g.gain.exponentialRampToValueAtTime(.001,x.currentTime+d+.5);o.connect(g);g.connect(x.destination);o.start(x.currentTime+d);o.stop(x.currentTime+d+.6)})}catch(e){}}
@@ -185,20 +201,153 @@ function reqNotifPerm(){
   }
 }
 
-function notify(title,body){
+function notify(title, body, opts){
   if(!cfg.notif)return;
   if(!('Notification' in window))return;
   if(Notification.permission!=='granted')return;
+  const o = opts || {};
+  // ── Prefer ServiceWorker.showNotification() ──
+  // This fires even when the tab is frozen / the app is backgrounded on
+  // mobile, unlike main-thread `new Notification()` which requires an
+  // active page context.
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.ready.then(reg => {
+      if(reg && reg.showNotification){
+        reg.showNotification(title, {
+          body: body || '',
+          tag: o.tag || 'odtaulai',
+          renotify: true,
+          icon: './icons/icon-192.png',
+          badge: './icons/icon-192.png',
+          silent: false,
+          requireInteraction: !!o.requireInteraction,
+          data: o.data || {},
+        }).catch(() => {});
+        return;
+      }
+    }).catch(() => {});
+    // The SW path returns — don't also fire the main-thread fallback
+    // when the SW is available to avoid double notifications.
+    return;
+  }
+  // ── Fallback: main-thread Notification (file:// or no SW) ──
   try{
-    const n=new Notification(title,{body,tag:'odtaulai',renotify:true,silent:false});
+    const n=new Notification(title,{body,tag:o.tag||'odtaulai',renotify:true,silent:false});
     setTimeout(()=>{try{n.close()}catch(e){}},8000);
   }catch(e){}
 }
 
-// Resume AudioContext on tab refocus (some browsers suspend when hidden)
+// ========== BACKGROUND RESILIENCE ==========
+// Mobile browsers aggressively suspend tabs. This section handles:
+//   1. Re-acquiring Wake Lock when page becomes visible (OS releases it on hide)
+//   2. Resuming AudioContext that the browser suspended while hidden
+//   3. Proactively resuming AudioContext BEFORE going hidden (catches the
+//      race where the browser suspends it moments after the tab hides)
+//   4. Catching up on missed reminder checks after waking from background
+
 document.addEventListener('visibilitychange',()=>{
-  if(!document.hidden&&_audioCtx&&_audioCtx.state==='suspended'){
-    try{_audioCtx.resume()}catch(e){}
+  if(document.hidden){
+    // ── Going to background ──
+    // Proactively resume the AudioContext right as we go hidden so any
+    // pre-scheduled oscillator nodes keep playing. Some browsers suspend
+    // the context within seconds of hiding the page; calling resume()
+    // here extends the window long enough for the keepalive oscillator
+    // to signal the browser that audio is actively in use.
+    if(_audioCtx&&_audioCtx.state==='suspended'){
+      try{_audioCtx.resume()}catch(e){}
+    }
+  }else{
+    // ── Coming back to foreground ──
+    // Resume AudioContext (may have been suspended by OS while hidden)
+    if(_audioCtx&&_audioCtx.state==='suspended'){
+      try{_audioCtx.resume()}catch(e){}
+    }
+    // Re-acquire Wake Lock — the browser releases it when page goes hidden
+    if(_keepaliveNode) _acquireWakeLock();
+    // Catch up on any reminders that were missed while backgrounded
+    // (setInterval is throttled to 1min+ in hidden tabs on most browsers)
+    if(typeof checkReminders==='function'){
+      try{checkReminders()}catch(e){}
+    }
+    // Re-check timer state — if a phase completed while backgrounded,
+    // the tick() function may not have fired; reconcile now
+    if(typeof _reconcileTimerAfterWake==='function'){
+      try{_reconcileTimerAfterWake()}catch(e){}
+    }
   }
 });
+
+// ========== WORKER-BASED BACKGROUND TICK ==========
+// setInterval is throttled to 1+ second intervals in hidden tabs, and can be
+// frozen entirely on mobile. A Web Worker's timer is NOT throttled. We spin
+// up a tiny inline Worker that ticks every 1s and postMessage's back to the
+// main thread, which fires the tick/reminder functions.
+let _bgWorker=null;
+function _startBgWorker(){
+  if(_bgWorker) return;
+  try{
+    const blob=new Blob([
+      'let id=null;onmessage=function(e){' +
+      'if(e.data==="start"){if(id)clearInterval(id);id=setInterval(function(){postMessage("tick")},1000)}' +
+      'if(e.data==="stop"){if(id){clearInterval(id);id=null}}}'
+    ],{type:'application/javascript'});
+    _bgWorker=new Worker(URL.createObjectURL(blob));
+    _bgWorker.onmessage=function(){
+      // This fires every 1s even when the tab is backgrounded
+      _bgWorkerTick();
+    };
+    _bgWorker.postMessage('start');
+  }catch(e){
+    // Workers may be blocked by CSP or not available — fall back silently
+    _bgWorker=null;
+  }
+}
+function _stopBgWorker(){
+  if(!_bgWorker)return;
+  try{_bgWorker.postMessage('stop');_bgWorker.terminate()}catch(e){}
+  _bgWorker=null;
+}
+
+/**
+ * Called every ~1s by the background Worker. Drives timer tick and reminder
+ * checks even when setInterval is throttled.
+ */
+function _bgWorkerTick(){
+  // Drive the Pomodoro tick if running
+  if(typeof tick==='function'&&typeof running!=='undefined'&&running){
+    try{tick()}catch(e){}
+  }
+  // Drive quick-timer ticks
+  if(typeof quickTimers!=='undefined'&&Array.isArray(quickTimers)&&quickTimers.some(qt=>qt.running)){
+    // The quickTick global handler in timer.js covers this, but it uses
+    // setInterval which is throttled. We fire it from here as a backstop.
+    if(typeof _bgQuickTick==='function'){
+      try{_bgQuickTick()}catch(e){}
+    }
+  }
+  // Drive stopwatch tick
+  if(typeof swRunning!=='undefined'&&swRunning&&typeof swTick==='function'){
+    try{swTick()}catch(e){}
+  }
+  // Drive reminder checks (every ~30s via a counter to avoid flooding)
+  if(!_bgWorkerTick._reminderCounter) _bgWorkerTick._reminderCounter=0;
+  _bgWorkerTick._reminderCounter++;
+  if(_bgWorkerTick._reminderCounter>=30){
+    _bgWorkerTick._reminderCounter=0;
+    if(typeof checkReminders==='function'){
+      try{checkReminders()}catch(e){}
+    }
+  }
+}
+
+/**
+ * Start/stop the background worker in sync with any timer running.
+ * Called from startKeepalive/stopKeepalive so the worker only lives
+ * when something actually needs reliable background ticking.
+ */
+// Patch startKeepalive/stopKeepalive to also manage the worker
+const _origStartKeepalive=startKeepalive;
+const _origStopKeepalive=stopKeepalive;
+startKeepalive=function(){_origStartKeepalive();_startBgWorker()};
+stopKeepalive=function(){_origStopKeepalive();_stopBgWorker()};
 

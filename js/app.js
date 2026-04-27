@@ -131,8 +131,21 @@ if ('serviceWorker' in navigator && !window.location.protocol.startsWith('file')
       });
     });
   }).catch(() => {});
-}
 
+  // ── Handle notification click routing from the Service Worker ──
+  // When the user taps a SW notification, the SW postMessages us with
+  // the notification's data payload so we can navigate to the right task.
+  navigator.serviceWorker.addEventListener('message', e => {
+    if(e.data?.type !== 'NOTIFICATION_CLICK') return;
+    const d = e.data.data || {};
+    if(d.action === 'openTask' && d.taskId != null){
+      if(typeof showTab === 'function') showTab('tasks');
+      if(typeof openTaskDetail === 'function') openTaskDetail(d.taskId);
+    } else if(d.action === 'openTimer'){
+      if(typeof showTab === 'function') showTab('focus');
+    }
+  });
+}
 // ========== ARCHIVE ==========
 function getArchives(){try{return JSON.parse(localStorage.getItem(ARCHIVE_KEY)||'[]')}catch(e){return[]}}
 
