@@ -491,6 +491,7 @@ function renderClassificationSettings(){
 function refreshClassificationUi(){
   if(typeof cfg !== 'undefined') ensureClassificationConfig(cfg);
   const sel = document.getElementById('filterCategory');
+  const tb = document.getElementById('tagsBar');
   if(sel){
     const cur = sel.value;
     sel.innerHTML = '<option value="all">Any category</option>';
@@ -501,6 +502,13 @@ function refreshClassificationUi(){
       sel.appendChild(o);
     });
     if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  }
+  if(tb){
+    const cur = sel ? sel.value : 'all';
+    tb.innerHTML = `<button class="sv-chip ${cur === 'all' ? 'active' : ''}" onclick="setFilterCategory('all')">All Tags</button>`;
+    getActiveCategories().forEach(c => {
+      tb.innerHTML += `<button class="sv-chip ${cur === c.id ? 'active' : ''}" onclick="setFilterCategory('${c.id}')">${c.label}</button>`;
+    });
   }
   if(document.getElementById('classificationManager')){
     renderClassificationSettings();

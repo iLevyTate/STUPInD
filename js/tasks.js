@@ -812,6 +812,19 @@ async function emptyArchiveWithConfirm(){
 }
 window.emptyArchiveWithConfirm=emptyArchiveWithConfirm;
 
+// Tags / Categories
+function setFilterCategory(catId) {
+  const sel = document.getElementById('filterCategory');
+  if (sel) {
+    sel.value = catId;
+    updateTaskFilters();
+    if (typeof refreshClassificationUi === 'function') {
+      refreshClassificationUi();
+    }
+  }
+}
+window.setFilterCategory = setFilterCategory;
+
 // Smart Views
 function setSmartView(v){
   smartView=v;

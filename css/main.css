@@ -150,7 +150,7 @@
   .pip:hover{border-color:#3d8bcc;transform:scale(1.15)}
   .pip.done{border-color:var(--work);background:var(--work);box-shadow:0 0 8px var(--work-glow)}.pip.current{border-color:var(--work);animation:pulse 1.5s infinite}.pip.pop{animation:pop .3s ease}
   .ctrls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-  .btn{padding:10px 24px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;transition:.2s}
+  .btn{padding:10px 24px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;transition:.2s}
   .btn-primary{background:linear-gradient(135deg,#2471a3,#3d8bcc);color:#fff;box-shadow:0 4px 16px rgba(36,113,163,.3)}
   .btn-pause{background:#1a2a3a;color:#e2e8f0;border:1px solid #2a4a6a}
   .btn-ghost{background:0 0;color:#6a8aaa;border:1px solid #2a3a4a}
@@ -158,6 +158,21 @@
   .btn-danger{background:0 0;color:#c0392b;border:1px solid #3a1a1a;font-size:10px;padding:8px 16px}
 
   .panel{width:100%;border-radius:14px;padding:18px;background:linear-gradient(135deg,#0c1724,#0f1c2e);border:1px solid #1a2840;margin-bottom:14px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+  .views-accordion{margin-bottom:14px;}
+  .views-accordion-summary{
+    font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text-3);text-transform:uppercase;
+    cursor:pointer;list-style:none;padding-bottom:10px;
+    display:flex;align-items:center;
+  }
+  .views-accordion-summary::-webkit-details-marker{display:none}
+  .views-accordion-summary::after{
+    content:"▼";font-size:8px;margin-left:6px;transition:transform 0.2s;
+  }
+  .views-accordion[open] .views-accordion-summary::after{transform:rotate(180deg)}
+  .views-accordion-body{
+    display:flex;flex-direction:column;gap:10px;
+    background:var(--bg-1);border:1px solid var(--border-subtle);border-radius:var(--r-lg);padding:12px;
+  }
   .shdr{display:flex;align-items:center;gap:8px;margin-bottom:12px}
   .sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
   /* margin:0 defends against browser default h2/h3 margins — section labels
@@ -257,7 +272,7 @@
   /* ========== ClickUp-style Task Manager ========== */
   /* Lists (projects) bar */
   .lists-bar{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px;background:#0a1320;border-radius:10px;border:1px solid #152238;margin-bottom:10px;align-items:center}
-  .list-chip{padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.5px;border:1px solid #1a2838;background:#0d1a28;color:#8a9bae;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:6px;font-family:inherit}
+  .list-chip{padding:6px 12px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.5px;border:1px solid #1a2838;background:#0d1a28;color:#8a9bae;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:6px;font-family:inherit}
   .list-chip:hover{background:#152a3e;color:#c8d6e5}
   .list-chip.active{background:linear-gradient(135deg,#1a3a5c,#1e4a6e);color:#e2e8f0;border-color:#2a4a6e}
   .list-chip .lc-dot{width:8px;height:8px;border-radius:50%}
@@ -322,7 +337,7 @@
   .today-banner-compact .tb-divider{width:1px;background:var(--border,#1a2838);opacity:.5}
 
   /* Status badge */
-  .status-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;transition:.15s;border:1px solid;font-family:inherit;white-space:nowrap}
+  .status-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;transition:.15s;border:1px solid;font-family:inherit;white-space:nowrap}
   .status-badge:hover{filter:brightness(1.15)}
   .status-open{background:rgba(106,138,170,.15);color:#8a9bae;border-color:#2a3a4a}
   .status-progress{background:rgba(61,139,204,.15);color:#5ab0e0;border-color:#2a4a6a}
@@ -347,7 +362,7 @@
   .date-chip--future{background:var(--bg-2);color:var(--text-3);border-color:var(--border);font-weight:500}
 
   /* Tag chips */
-  .tag-chip{display:inline-flex;align-items:center;padding:1px 6px;border-radius:8px;font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(61,139,204,.15);color:#5ab0e0;border:1px solid #2a4a6a}
+  .tag-chip{display:inline-flex;align-items:center;padding:1px 6px;border-radius:999px;font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(61,139,204,.15);color:#5ab0e0;border:1px solid #2a4a6a}
 
   /* Task row extended (clickable open detail) */
   .task-item.clickable{cursor:pointer}
@@ -384,7 +399,7 @@
   .mfield-chip-btn.active{background:linear-gradient(135deg,#1a3a5c,#1e4a6e);color:#e2e8f0;border-color:#2a4a6e}
   .mfield-chip-btn:hover:not(.active){color:#c8d6e5;border-color:#2a4a6e}
   .tags-editor{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
-  .tag-edit-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(61,139,204,.15);color:#5ab0e0;border:1px solid #2a4a6a}
+  .tag-edit-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(61,139,204,.15);color:#5ab0e0;border:1px solid #2a4a6a}
   .tag-edit-chip .tag-rm{cursor:pointer;color:#e06050;margin-left:2px}
   .tag-input{padding:3px 8px;background:#0d1a28;border:1px solid #1a2838;border-radius:10px;color:#c8d6e5;font-size:10px;font-family:inherit;outline:0;width:80px}
   .modal-stat{display:flex;gap:12px;padding:10px 14px;background:#071019;border-radius:8px;margin-bottom:14px;font-size:10px;color:#5a8ab5;letter-spacing:.5px}
@@ -441,7 +456,7 @@
   .sv-toggle:hover{background:var(--bg-2,#152a3e);color:var(--text-1,#e2e8f0);border-style:solid}
   .sv-toggle-arrow{font-size:10px;line-height:1}
   .smart-views:not(.smart-views--collapsed) .sv-toggle{order:99}
-  .sv-chip{padding:7px 12px;background:transparent;border:none;border-radius:7px;color:#5a8ab5;font-size:10px;font-weight:700;letter-spacing:.8px;cursor:pointer;transition:.15s;font-family:inherit;display:flex;align-items:center;gap:5px;text-transform:uppercase}
+  .sv-chip{padding:7px 12px;background:transparent;border:none;border-radius:999px;color:#5a8ab5;font-size:10px;font-weight:700;letter-spacing:.8px;cursor:pointer;transition:.15s;font-family:inherit;display:flex;align-items:center;gap:5px;text-transform:uppercase}
   .sv-chip:hover{background:#152a3e;color:#c8d6e5}
   .sv-chip.active{background:linear-gradient(135deg,#1a3a5c,#1e4a6e);color:#e2e8f0;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
   .sv-icon{font-size:12px;line-height:1}
@@ -660,8 +675,8 @@
   .ctrls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 
   /* Panel surfaces */
-  .panel{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:14px;box-shadow:var(--shadow-1)}
-  .task-search-bar{margin-bottom:10px;padding:8px 10px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1)}
+  .panel{background:var(--bg-1);border:1px solid var(--border-subtle);border-radius:var(--r-lg);padding:16px;margin-bottom:14px;box-shadow:var(--shadow-1)}
+  .task-search-bar{margin-bottom:10px;padding:8px 10px;background:var(--bg-1);border:1px solid var(--border-subtle);border-radius:var(--r-lg);box-shadow:var(--shadow-1)}
 
   /* Section labels — stop yelling */
   .slbl{font-size:12px;font-weight:600;letter-spacing:.01em;text-transform:none;color:var(--text-1);font-family:var(--font-sans)}
@@ -677,7 +692,7 @@
   .nav-tab-icon{font-size:16px}
 
   /* Buttons — consistent, clean */
-  .btn{font-family:var(--font-sans);font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;padding:10px 18px;border-radius:var(--r-sm);transition:.15s}
+  .btn{font-family:var(--font-sans);font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;padding:10px 18px;border-radius:999px;transition:.15s}
   .btn-primary{background:var(--accent);color:#0a1320}
   .btn-primary:hover{background:#7db3ff}
   .btn-pause{background:var(--warning);color:#0a1320}
@@ -695,9 +710,9 @@
   .tb-divider{background:var(--border)}
 
   /* Smart view chips — calmer */
-  .smart-views{background:var(--bg-1);border-color:var(--border);padding:5px;gap:2px}
-  .sv-chip{color:var(--text-3);font-size:var(--fs-12);font-weight:500;letter-spacing:0;text-transform:none;padding:8px 14px;display:inline-flex;gap:6px;align-items:center;border:1px solid transparent;border-radius:var(--r-sm)}
-  .sv-chip:hover{background:var(--bg-2);color:var(--text-1)}
+  .smart-views{background:var(--bg-1);border:1px solid var(--border-subtle);padding:5px;gap:2px;border-radius:12px;}
+  .sv-chip{background:var(--bg-1);color:var(--text-3);font-size:var(--fs-12);font-weight:500;letter-spacing:0;text-transform:none;padding:8px 14px;display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border-subtle);border-radius:999px;cursor:pointer}
+  .sv-chip:hover{background:var(--bg-2);color:var(--text-1);border-color:var(--border)}
   /* Active state lifted from a subtle bg-3 swap to a clear accent-tinted
      pill — matches the primary-action visual language and makes the
      current view legible at a glance, especially on light theme. */
@@ -711,7 +726,7 @@
   .sv-chip.active .sv-count{background:var(--accent);color:var(--bg-0)}
 
   /* Lists bar */
-  .lists-bar{background:var(--bg-1);border-color:var(--border);padding:8px 10px}
+  .lists-bar{background:var(--bg-1);border:1px solid var(--border-subtle);padding:8px 10px;border-radius:12px;}
   .list-chip{background:var(--bg-2);border-color:var(--border);color:var(--text-2);font-size:12px;font-weight:500;letter-spacing:0;text-transform:none}
   .list-chip:hover{background:var(--bg-3);color:var(--text-1)}
   .list-chip.active{background:var(--bg-3);color:var(--text-1);border-color:var(--border-strong)}
@@ -719,7 +734,7 @@
   .list-add{color:var(--text-3);font-size:12px;font-weight:500}
 
   /* Toolbar */
-  .task-toolbar{background:var(--bg-1);border-color:var(--border);padding:8px 10px}
+  .task-toolbar{background:var(--bg-1);border:1px solid var(--border-subtle);padding:8px 10px;border-radius:12px;}
   .task-search{background:var(--bg-2);border-color:var(--border);color:var(--text-1);font-size:13px;padding:8px 12px;border-radius:var(--r-sm)}
   .task-search::placeholder{color:var(--text-4)}
   .task-search:focus{border-color:var(--accent-border);background:var(--bg-2)}
@@ -740,7 +755,7 @@
     padding:11px 18px;min-height:44px;
     background:var(--accent);color:var(--bg-0);
     font-weight:700;font-size:var(--fs-13);letter-spacing:0;text-transform:none;
-    border:1px solid var(--accent);border-radius:var(--r-sm);
+    border:1px solid var(--accent);border-radius:999px;
     transition:filter .12s,background .12s;
   }
   .task-add:hover{filter:brightness(1.08)}
