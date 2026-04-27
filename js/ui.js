@@ -592,7 +592,12 @@ function renderTaskItem(t,depth){
   if(smartView==='impact'&&typeof isParetoTop==='function'&&isParetoTop(t.id))d.classList.add('task-item--pareto');
   d.dataset.priority=(!t.starred&&t.priority&&t.priority!=='none')?t.priority:'';
   d.style.marginLeft=(depth*18)+'px';
-  d.setAttribute('draggable','true');
+  // Reorder is now handled by Sortable.js (see _initTaskListSortable below).
+  // Native draggable=true would double-fire and conflict with Sortable's
+  // synthetic touch path on iOS, so we don't set it here anymore. The drop
+  // target on calendar days (.cal-day) keeps its own native handlers — that
+  // surface accepts a drop from a Sortable item without further config since
+  // Sortable falls back to native dragstart on desktop.
   d.dataset.taskId=t.id;
   if(t.category&&dueCls!=='overdue'&&typeof getCategoryDef==='function'){
     const cdef=getCategoryDef(t.category);
@@ -606,22 +611,10 @@ function renderTaskItem(t,depth){
     window._lastAddedTaskId=null;
     requestAnimationFrame(()=>{try{d.scrollIntoView({block:'nearest',behavior:'smooth'})}catch(_){}});
   }
-  d.ondragstart=function(e){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',t.id);d.classList.add('dragging')};
-  d.ondragend=function(){d.classList.remove('dragging');document.querySelectorAll('.task-item').forEach(el=>el.classList.remove('drop-above','drop-below'))};
-  d.ondragover=function(e){
-    e.preventDefault();e.dataTransfer.dropEffect='move';
-    const r=d.getBoundingClientRect();const above=e.clientY-r.top<r.height/2;
-    d.classList.toggle('drop-above',above);d.classList.toggle('drop-below',!above);
-  };
-  d.ondragleave=function(){d.classList.remove('drop-above','drop-below')};
-  d.ondrop=function(e){
-    e.preventDefault();e.stopPropagation();
-    const srcId=parseInt(e.dataTransfer.getData('text/plain'),10);
-    if(!Number.isFinite(srcId)||srcId<=0||srcId===t.id)return;
-    const r=d.getBoundingClientRect();const above=e.clientY-r.top<r.height/2;
-    handleTaskDrop(srcId,t.id,above?'before':'after');
-    d.classList.remove('drop-above','drop-below');
-  };
+  // Per-task ondragstart/over/leave/drop handlers were removed in the
+  // Sortable migration. The container-level Sortable instance now owns
+  // reorder; .drop-above/.drop-below visual hints are no longer used because
+  // Sortable provides its own ghost/placeholder.
   d.onclick=function(e){
     if(e.target.closest('button')||e.target.closest('.task-chevron')||e.target.closest('.drag-handle'))return;
     if(typeof isBulkMode === 'function' && isBulkMode()){
@@ -858,6 +851,7 @@ function openTaskDetail(id){
         gid('mdCheckbox').classList.remove('checked');gid('mdCheckbox').textContent='';
         [...sChips.children].forEach((c,i)=>c.classList.toggle('active',STATUS_ORDER[i]==='open'));
         renderMdHabitLog(t);
+        renderMdSessions(t);
         gid('mdTracked').textContent=fmtHMS(getRolledUpTime(t.id))+' · '+getRolledUpSessions(t.id)+' sessions';
       }else{
         t.status=st;
@@ -956,10 +950,65 @@ function openTaskDetail(id){
     if(bdBody){ bdBody.textContent = ''; delete bdBody.dataset.loaded; }
   }
   renderMdHabitLog(t);
+  renderMdSessions(t);
   gid('taskModal').classList.add('open');
   _taskModalPrevFocus=document.activeElement;
   document.addEventListener('keydown',_taskModalTabTrap,true);
   setTimeout(()=>gid('mdName').focus(),50)
+}
+
+/**
+ * Per-task session history. Renders one entry per timer session that recorded
+ * to t.sessionEntries (timer.js writes these on phase complete + skip). Hidden
+ * gracefully when the task has no sessions yet so empty tasks don't show a
+ * useless empty list.
+ */
+function renderMdSessions(t){
+  const el = gid('mdSessions');
+  const wrap = gid('mdSessionsWrap');
+  if(!el) return;
+  const entries = (t && Array.isArray(t.sessionEntries)) ? t.sessionEntries : [];
+  if(!entries.length){
+    el.replaceChildren();
+    if(wrap) wrap.style.display = 'none';
+    return;
+  }
+  if(wrap) wrap.style.display = '';
+  el.replaceChildren();
+  // Show newest first, cap at 30 visible to keep the modal scrollable.
+  const recent = entries.slice(-30).reverse();
+  const ul = document.createElement('ul');
+  ul.className = 'md-sessions-list';
+  recent.forEach(s => {
+    const li = document.createElement('li');
+    li.className = 'md-sessions-item' + (s.type === 'work-partial' ? ' md-sessions-item--partial' : '');
+    const ts = document.createElement('span');
+    ts.className = 'md-sessions-ts';
+    // Format: "Apr 27, 2:34 PM" — small but parseable. timeNowFull stores
+    // ISO so Date(s.ts) is safe.
+    try{
+      const d = new Date(s.ts);
+      ts.textContent = d.toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+    }catch(_){ ts.textContent = String(s.ts || ''); }
+    const dur = document.createElement('span');
+    dur.className = 'md-sessions-dur';
+    dur.textContent = (typeof fmtHMS === 'function') ? fmtHMS(s.durationSec || 0) : (s.durationSec || 0) + 's';
+    li.append(ts, dur);
+    if(s.type === 'work-partial'){
+      const tag = document.createElement('span');
+      tag.className = 'md-sessions-tag';
+      tag.textContent = 'partial';
+      li.appendChild(tag);
+    }
+    ul.appendChild(li);
+  });
+  if(entries.length > 30){
+    const more = document.createElement('li');
+    more.className = 'md-sessions-more';
+    more.textContent = '+ ' + (entries.length - 30) + ' earlier sessions';
+    ul.appendChild(more);
+  }
+  el.appendChild(ul);
 }
 
 function renderMdHabitLog(t){
@@ -1177,6 +1226,7 @@ function toggleTaskDone(){
     completeHabitCycle(t);
     gid('mdCheckbox').classList.remove('checked');gid('mdCheckbox').textContent='';
     renderMdHabitLog(t);
+    renderMdSessions(t);
     gid('mdTracked').textContent=fmtHMS(getRolledUpTime(t.id))+' · '+getRolledUpSessions(t.id)+' sessions';
   }else{t.status='done';t.completedAt=stampCompletion();gid('mdCheckbox').classList.add('checked');gid('mdCheckbox').textContent='✓'}
   // Update status chips
@@ -1574,6 +1624,23 @@ function showSessionNotePrompt(taskId){
   };
 }
 window.showSessionNotePrompt = showSessionNotePrompt;
+
+/**
+ * Live-refresh the task detail modal's tracking surfaces when a timer session
+ * completes for the task that's currently open. Without this, the modal shows
+ * stale "1 session" text after the user kicked off a second timer round and
+ * watched it complete with the modal still open.
+ */
+function refreshOpenTaskModalIfMatches(taskId){
+  if(editingTaskId == null || editingTaskId !== taskId) return;
+  const t = (typeof findTask === 'function') ? findTask(taskId) : null;
+  if(!t) return;
+  const trackedEl = gid('mdTracked');
+  if(trackedEl) trackedEl.textContent = fmtHMS(getRolledUpTime(t.id)) + ' · ' + getRolledUpSessions(t.id) + ' sessions';
+  if(typeof renderMdSessions === 'function') renderMdSessions(t);
+  if(typeof renderMdHabitLog === 'function') renderMdHabitLog(t);
+}
+window.refreshOpenTaskModalIfMatches = refreshOpenTaskModalIfMatches;
 
 // ========== G-10 DAILY BRIEF + G-11 WEEKLY REVIEW ==========
 // Both render as a temporary modal-ish card. They're narrative-only (no ops),

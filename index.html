@@ -722,6 +722,17 @@
       <p id="bulkImportHint" class="bulk-import-hint"></p>
       <label class="bulk-import-label" for="bulkImportTextarea">One task per line</label>
       <textarea id="bulkImportTextarea" class="mfield-textarea bulk-import-textarea" rows="12" spellcheck="false"></textarea>
+      <!-- Auto-organize: route each pasted line to the right list + fill in
+           category/priority via on-device embeddings (or fall back to LLM).
+           Hidden when neither model is ready so the toggle never lies. -->
+      <label class="bulk-import-auto" id="bulkImportAutoWrap" style="display:none">
+        <input type="checkbox" id="bulkImportAuto">
+        <span class="bulk-import-auto-text">
+          <strong>Auto-organize</strong>
+          <span id="bulkImportAutoHint" class="bulk-import-auto-hint"></span>
+        </span>
+      </label>
+      <div id="bulkImportProgress" class="bulk-import-progress" hidden role="status" aria-live="polite"></div>
     </div>
     <div class="modal-foot">
       <button type="button" class="mfoot-btn mfoot-cancel" onclick="closeBulkImportModal()">Cancel</button>
@@ -868,6 +879,10 @@
             <label class="mfield-lbl" for="mdCompletionNote">Completion note</label>
             <textarea class="mfield-textarea" id="mdCompletionNote" rows="2" placeholder="What actually happened…"></textarea>
           </div>
+          <div class="mfield" id="mdSessionsWrap">
+            <div class="mfield-lbl" id="mdSessionsLbl">Session history</div>
+            <div id="mdSessions" class="md-sessions" role="group" aria-labelledby="mdSessionsLbl"></div>
+          </div>
           <div class="mfield">
             <div class="mfield-lbl" id="mdHabitLogLbl">Completion history (repeating tasks)</div>
             <div id="mdHabitLog" class="md-habit-log" role="group" aria-labelledby="mdHabitLogLbl"></div>
@@ -950,6 +965,11 @@
 </div>
 
 <!-- App modules — load order matters (globals first, init last) -->
+<!-- Vendored: SortableJS for touch+mouse drag-drop reorder. Native HTML5 drag
+     fails on iOS Safari and is inconsistent on Android; Sortable normalises
+     both with synthetic touch events. Loaded before app modules so any
+     module that wants to call Sortable() at init time can see it. -->
+<script src="js/vendor/Sortable.min.js"></script>
 <script src="js/config.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/utils.js"></script>

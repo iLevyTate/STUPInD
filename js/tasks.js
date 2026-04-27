@@ -437,6 +437,7 @@ function openBulkImportModal(items, skippedLong){
   }
   if(hint) hint.innerHTML = hintHtml;
   _updateBulkImportButtonState();
+  _syncBulkImportAutoToggle();
   ta.oninput = _updateBulkImportButtonState;
   ov.classList.add('open');
   setTimeout(() => ta.focus(), 30);
@@ -475,14 +476,110 @@ function closeBulkImportModal(){
   }
 }
 
+/**
+ * Show the Auto-organize toggle iff at least one of the on-device models is
+ * ready. The hint text reflects which path will run (embeddings vs LLM)
+ * so the user knows what they're opting into. Hidden entirely if neither
+ * model is loaded — toggling it would do nothing useful.
+ */
+function _syncBulkImportAutoToggle(){
+  const wrap = gid('bulkImportAutoWrap');
+  const hint = gid('bulkImportAutoHint');
+  const cb = gid('bulkImportAuto');
+  if(!wrap || !cb) return;
+  const intelOk = (typeof isIntelReady === 'function') && isIntelReady();
+  const genOk = (typeof isGenReady === 'function') && isGenReady();
+  if(!intelOk && !genOk){
+    wrap.style.display = 'none';
+    cb.checked = false;
+    return;
+  }
+  wrap.style.display = '';
+  if(hint){
+    if(intelOk) hint.textContent = 'Route each task to the right list and fill in life area / priority via on-device embeddings (instant).';
+    else hint.textContent = 'Embeddings not ready — falling back to the on-device LLM (slower, may take a few seconds per task).';
+  }
+}
+
+/**
+ * Enrich a single bulk-imported task with predicted metadata. Returns an
+ * object of fields to merge onto the task. Embeddings preferred (fast);
+ * the LLM is the fallback when embeddings haven't been built yet.
+ */
+async function _bulkEnrichOne(name){
+  const out = {};
+  // Embedding-based path — produces category, priority, effort, energy, tags
+  // via kNN over existing tasks. List + due date come from separate
+  // embedding-driven helpers (predictListId, predictDueDate).
+  if(typeof isIntelReady === 'function' && isIntelReady() && typeof predictMetadata === 'function'){
+    try{
+      const pred = await predictMetadata(name, 5);
+      if(pred){
+        if(pred.category) out.category = pred.category;
+        if(pred.priority && pred.priority !== 'normal') out.priority = pred.priority;
+        if(pred.effort) out.effort = pred.effort;
+        if(pred.energyLevel) out.energyLevel = pred.energyLevel;
+        if(Array.isArray(pred.tags) && pred.tags.length) out.tags = pred.tags;
+      }
+      // List routing — only meaningful with multiple lists; predictListId
+      // returns null when scores are below confidence floor.
+      if(typeof predictListId === 'function'){
+        try{
+          const lid = await predictListId(name);
+          if(lid != null) out.listId = lid;
+        }catch(_){ /* skip */ }
+      }
+      // Due-date kNN — needs a quorum of similar past tasks with dueDates.
+      if(typeof predictDueDate === 'function'){
+        try{
+          const dd = await predictDueDate(name, 5);
+          if(dd) out.dueDate = dd;
+        }catch(_){ /* skip */ }
+      }
+      return out;
+    }catch(e){ /* fall through to LLM */ }
+  }
+  // LLM fallback — produces priority/dueDate/effort/tags from freeform text.
+  if(typeof isGenReady === 'function' && isGenReady() && typeof genParseFreeform === 'function'){
+    try{
+      const parsed = await genParseFreeform(name);
+      if(parsed && typeof parsed === 'object'){
+        if(parsed.priority && parsed.priority !== 'normal') out.priority = parsed.priority;
+        if(parsed.dueDate) out.dueDate = parsed.dueDate;
+        if(parsed.effort) out.effort = parsed.effort;
+        if(Array.isArray(parsed.tags) && parsed.tags.length) out.tags = parsed.tags;
+      }
+    }catch(e){ /* swallow — bulk import shouldn't fail because one task didn't enrich */ }
+  }
+  return out;
+}
+
+function _setBulkProgress(text){
+  const el = gid('bulkImportProgress');
+  if(!el) return;
+  if(!text){ el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.textContent = text;
+}
+
 async function confirmBulkImport(){
   const ta = gid('bulkImportTextarea');
   if(!ta) return;
   const lines = ta.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if(!lines.length) return;
   ensureDefaultList();
-  closeBulkImportModal();
-  for(const line of lines){
+  const auto = gid('bulkImportAuto');
+  const autoOn = !!(auto && auto.checked);
+  // Disable the confirm button while enrichment runs so the user can't
+  // double-fire and so they SEE that work is happening.
+  const btn = gid('bulkImportConfirm');
+  if(btn) btn.disabled = true;
+  // Build all tasks first (parse pass), then optionally enrich (slow pass),
+  // then close the modal — this way the progress UI stays visible during
+  // the slow path instead of blocking on a closed modal.
+  const built = [];
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i];
     let name, props;
     if(typeof parseQuickAddAsync === 'function'){
       const parsed = await parseQuickAddAsync(line);
@@ -494,13 +591,31 @@ async function confirmBulkImport(){
       props = p.props;
     }
     if(!name){ name = line; props = {}; }
-    const _bt=Object.assign({
-      id:++taskIdCtr,name,totalSec:0,sessions:0,created:timeNowFull(),
-      parentId:null,collapsed:false
-    },defaultTaskProps(),props);
+    built.push({ name, props });
+  }
+  // Enrichment pass — only when the user opted in. Quick-add tokens (props)
+  // win over predicted metadata so explicit "@urgent" beats a model guess.
+  if(autoOn){
+    const total = built.length;
+    for(let i = 0; i < total; i++){
+      _setBulkProgress('Auto-organizing ' + (i + 1) + ' / ' + total + '…');
+      const enriched = await _bulkEnrichOne(built[i].name);
+      // Predicted fields go in FIRST, explicit quick-add tokens overlay on top.
+      built[i].props = Object.assign({}, enriched, built[i].props);
+    }
+    _setBulkProgress(null);
+  }
+  // Persist phase — single render + save at the end.
+  for(const b of built){
+    const _bt = Object.assign({
+      id:++taskIdCtr, name:b.name, totalSec:0, sessions:0, created:timeNowFull(),
+      parentId:null, collapsed:false
+    }, defaultTaskProps(), b.props);
     tasks.push(_bt);
     _taskIndexRegister(_bt);
   }
+  if(btn) btn.disabled = false;
+  closeBulkImportModal();
   const inp = gid('taskInput');
   if(inp) inp.value = '';
   maybeShowSwipeTip();
@@ -509,6 +624,8 @@ async function confirmBulkImport(){
   if(typeof maybeShowEnhanceBtn === 'function') maybeShowEnhanceBtn();
   if(typeof scheduleIntelDupRefresh === 'function') scheduleIntelDupRefresh();
 }
+
+window._syncBulkImportAutoToggle = _syncBulkImportAutoToggle;
 
 window.closeBulkImportModal = closeBulkImportModal;
 window.confirmBulkImport = confirmBulkImport;
@@ -1878,6 +1995,63 @@ function renderChecklist(taskId){
     list.appendChild(d);
   });
 }
+
+// ========== DRAG-DROP REORDER (Sortable.js) ==========
+// Single Sortable instance bound to #taskList. Replaced the per-task
+// HTML5 native drag handlers (which silently failed on iOS Safari and were
+// inconsistent on Android). Sortable normalises mouse + touch with a
+// synthetic drag image, so reorder finally works on phones.
+let _taskListSortable = null;
+function _initTaskListSortable(){
+  if(_taskListSortable) return; // idempotent: SW + module reloads can call twice
+  if(typeof window === 'undefined' || typeof window.Sortable !== 'function') return;
+  const list = document.getElementById('taskList');
+  if(!list) return;
+  _taskListSortable = new window.Sortable(list, {
+    // Anchor the gesture to the explicit drag-handle so swipe-to-complete
+    // and tap-to-open don't fight with reorder. Without this, every touch
+    // on a card races between Sortable and our touchstart/end handlers.
+    handle: '.drag-handle',
+    // Fall back to whole-card drag on desktop where the handle is hover-only,
+    // because mouse users don't expect a tiny handle target. .task-action
+    // is the action-buttons cluster and must remain clickable.
+    filter: '.task-action,button,input,.task-checkbox,.task-play,.task-rm,.task-star,.task-chevron',
+    preventOnFilter: false,
+    animation: 150,
+    ghostClass: 'task-item--ghost',
+    chosenClass: 'task-item--chosen',
+    dragClass: 'task-item--dragging',
+    // Force fallback mode on touch — uses a synthetic drag image instead of
+    // the broken iOS native one. Mouse continues to use HTML5 native.
+    forceFallback: false,
+    fallbackOnBody: true,
+    swapThreshold: 0.65,
+    onEnd: function(evt){
+      // Read new DOM order, persist as t.order. Force manual sort so the
+      // user-driven order survives across renders that would otherwise
+      // re-sort by smart heuristics.
+      const items = list.querySelectorAll('.task-item');
+      let dirty = false;
+      items.forEach((el, i) => {
+        const id = parseInt(el.dataset.taskId || '', 10);
+        if(!Number.isFinite(id)) return;
+        const t = (typeof findTask === 'function') ? findTask(id) : null;
+        if(!t) return;
+        const newOrder = i * 10;
+        if(t.order !== newOrder){ t.order = newOrder; dirty = true; }
+      });
+      if(dirty){
+        if(typeof taskSortBy !== 'undefined' && taskSortBy !== 'manual'){
+          taskSortBy = 'manual';
+          const sel = document.getElementById('taskSortSel');
+          if(sel) sel.value = 'manual';
+        }
+        if(typeof saveState === 'function') saveState('user');
+      }
+    },
+  });
+}
+window._initTaskListSortable = _initTaskListSortable;
 
 // ========== TASK NOTES ==========
 let _noteIdCtr=0;
