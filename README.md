@@ -398,11 +398,11 @@ All palette actions fuzzy-match — you rarely need to remember the exact label.
 
 ```text
 Buy milk tomorrow @urgent #shopping !star ~daily
-│         │         │        │         │     └─ recurrence: daily | weekdays | weekly | monthly
-│         │         │        │         └─ star flag
-│         │         │        └─ tag
-│         │         └─ priority: urgent | high | normal | low
-│         └─ date: natural language (chrono-node — "next Monday at 3pm", "in 2 hours", …)
+│        │        │       │         │     └─ recurrence: daily | weekdays | weekly | monthly
+│        │        │       │         └─ star flag
+│        │        │       └─ tag
+│        │        └─ priority: urgent | high | normal | low
+│        └─ date: natural language (chrono-node — "next Monday at 3pm", "in 2 hours", …)
 └─ task name
 ```
 
@@ -517,6 +517,8 @@ See also: **[CONTRIBUTING.md](CONTRIBUTING.md)** · **[ARCHITECTURE.md](ARCHITEC
 ## License
 
 **MIT.** Do what you want. Attribution appreciated but not required. See [LICENSE](LICENSE).
+
+---
 
 ## Credits
 
