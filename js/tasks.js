@@ -440,6 +440,7 @@ function openBulkImportModal(items, skippedLong){
   _syncBulkImportAutoToggle();
   ta.oninput = _updateBulkImportButtonState;
   ov.classList.add('open');
+  ov.setAttribute('aria-hidden','false');
   setTimeout(() => ta.focus(), 30);
   // Modal focus management — trap Tab/Shift+Tab inside the dialog so users
   // can't accidentally tab back to the page behind it.
@@ -465,7 +466,10 @@ function _updateBulkImportButtonState(){
 
 function closeBulkImportModal(){
   const ov = gid('bulkImportModal');
-  if(ov) ov.classList.remove('open');
+  if(ov) {
+    ov.classList.remove('open');
+    ov.setAttribute('aria-hidden','true');
+  }
   const ta = gid('bulkImportTextarea');
   if(ta) ta.oninput = null;
   if(typeof removeTabTrap === 'function') removeTabTrap();

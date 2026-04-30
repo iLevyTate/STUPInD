@@ -687,11 +687,11 @@
 </div>
 
 <!-- What next? overlay -->
-<div id="whatNextOverlay" class="what-next-overlay" hidden data-action="closeWhatNextOnBackdrop">
+<div id="whatNextOverlay" class="what-next-overlay" hidden role="dialog" aria-modal="true" aria-label="What next?" aria-hidden="true" data-action="closeWhatNextOnBackdrop">
   <div class="what-next-panel">
     <div class="what-next-hdr">
       <span>What next?</span>
-      <button type="button" class="what-next-x" data-action="closeWhatNext" aria-label="Close">✕</button>
+      <button type="button" class="what-next-x" data-action="closeWhatNext" aria-label="Close (Escape)" aria-keyshortcuts="Escape" title="Close (Escape)">✕</button>
     </div>
     <p class="what-next-sub">Ranked by priority, due date, energy fit, and blockers (no embeddings).</p>
     <div class="what-next-ctx">
@@ -733,7 +733,7 @@
   <div class="modal bulk-import-modal">
     <div class="modal-head">
       <span id="bulkImportTitle">Import tasks</span>
-      <button type="button" class="modal-close" data-action="closeBulkImportModal" aria-label="Close">✕</button>
+      <button type="button" class="modal-close" data-action="closeBulkImportModal" aria-label="Close import dialog (Escape)" aria-keyshortcuts="Escape" title="Close (Escape)">✕</button>
     </div>
     <div class="modal-body">
       <p id="bulkImportHint" class="bulk-import-hint"></p>
@@ -793,7 +793,7 @@
     <div class="modal-head">
       <button type="button" class="task-checkbox" id="mdCheckbox" data-action="toggleTaskDone"></button>
       <input class="mfield-in mdName-input" id="mdName" placeholder="Task name" aria-label="Task name">
-      <button type="button" class="modal-close" data-action="closeTaskDetail" aria-label="Close task">✕</button>
+      <button type="button" class="modal-close" data-action="closeTaskDetail" aria-label="Close task detail (Escape)" aria-keyshortcuts="Escape" title="Close (Escape)">✕</button>
     </div>
     <div class="modal-body">
       <div class="modal-stat" id="mdStats"></div>

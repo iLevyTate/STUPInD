@@ -3734,3 +3734,98 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
 
 /* Starred indicator: gold left-stripe on the board card */
 .board-card.starred-card{border-left-color:#e0a020!important}
+
+/* === ENHANCED EMPTY STATE VISIBILITY === */
+/* Improve empty state visual prominence and accessibility */
+.task-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  gap: var(--space-4);
+}
+
+.iempty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  gap: var(--space-3);
+}
+
+.log-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  gap: var(--space-3);
+}
+
+.task-empty-icon {
+  display: flex;
+  justify-content: center;
+  line-height: 0;
+  color: var(--text-3);
+  opacity: 0.7;
+  margin-block-end: var(--space-4);
+  font-size: 48px;
+  animation: gentlePulse 3s ease-in-out infinite;
+}
+
+/* Gentle pulse for empty state icons to draw attention */
+@keyframes gentlePulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 0.8; transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-empty-icon {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* === FORM VALIDATION ERROR STATES === */
+/* Visual feedback for form validation errors */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--danger, #e74c3c);
+  background: rgba(231, 76, 60, 0.04);
+}
+
+input[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus {
+  outline-color: var(--danger, #e74c3c);
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.12);
+}
+
+/* Required field indicators */
+.form-required::after {
+  content: ' *';
+  color: var(--danger, #e74c3c);
+  font-weight: 700;
+}
+
+/* Error message styling */
+[role="alert"],
+.field-error,
+.validation-error {
+  color: var(--danger, #e74c3c);
+  font-size: var(--fs-12);
+  margin-block-start: 4px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+/* Success field styling */
+input[aria-invalid="false"],
+textarea[aria-invalid="false"],
+select[aria-invalid="false"] {
+  border-color: #27ae60;
+  background: rgba(39, 174, 96, 0.04);
+}

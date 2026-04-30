@@ -2098,6 +2098,7 @@ function openWhatNext(){
       : '<span class="text-12-muted">Nothing queued — add tasks or clear filters.</span>';
   }
   o.hidden = false;
+  o.setAttribute('aria-hidden','false');
   if(typeof openFocusTrap === 'function') openFocusTrap(o);
 
   // Opt-in LLM rationale for the top pick. Runs after the modal is visible
@@ -2118,7 +2119,10 @@ function openWhatNext(){
 
 function closeWhatNext(){
   const o = document.getElementById('whatNextOverlay');
-  if(o) o.hidden = true;
+  if(o) {
+    o.hidden = true;
+    o.setAttribute('aria-hidden','true');
+  }
   if(typeof closeFocusTrap === 'function') closeFocusTrap();
 }
 

@@ -133,6 +133,7 @@ function openCmdK(opts){
   const ov=gid('cmdkOverlay');if(!ov)return;
   _cmdkPrevFocus=document.activeElement;
   ov.classList.add('open');
+  ov.setAttribute('aria-hidden','false');
   cmdkMode=openAsk?'ask':'find';
   _cmdkAskHistoryIdx=-1;_cmdkLastReply=null;_cmdkAskBusy=false;
   _applyCmdkMode();
@@ -147,7 +148,9 @@ function openCmdK(opts){
 function closeCmdK(){
   _cmdkAbortAsk();
   if(typeof removeTabTrap==='function') removeTabTrap();
-  gid('cmdkOverlay').classList.remove('open');
+  const ov=gid('cmdkOverlay');
+  ov.classList.remove('open');
+  ov.setAttribute('aria-hidden','true');
   if(_cmdkPrevFocus&&_cmdkPrevFocus.focus)try{_cmdkPrevFocus.focus()}catch(_){}
   _cmdkPrevFocus=null;
 }
@@ -527,6 +530,19 @@ document.addEventListener('keydown',(e)=>{
     }
   }
 },true);
+
+// Keyboard shortcut: Shift+D — toggle theme
+document.addEventListener('keydown',(e)=>{
+  if(e.shiftKey&&(e.key==='d'||e.key==='D')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    const active=document.activeElement;
+    const tag=active?active.tagName.toLowerCase():'';
+    // Don't intercept in text inputs where 'D' might be part of user input
+    if(tag!=='input'||active.type==='checkbox'||active.type==='radio'){
+      e.preventDefault();
+      if(typeof toggleTheme==='function') toggleTheme();
+    }
+  }
+});
 
 // ========== THEME TOGGLE ==========
 // Manual toggle wins over OS preference: once the user picks a theme it sticks
@@ -1047,7 +1063,9 @@ function openTaskDetail(id){
   }
   renderMdHabitLog(t);
   renderMdSessions(t);
-  gid('taskModal').classList.add('open');
+  const modal=gid('taskModal');
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden','false');
   _taskModalPrevFocus=document.activeElement;
   document.addEventListener('keydown',_taskModalTabTrap,true);
   setTimeout(()=>gid('mdName').focus(),50)
@@ -1201,6 +1219,7 @@ function closeTaskDetail(opts){
   _taskModalSnapshot=null;
   const _modalEl=gid('taskModal');
   _modalEl.classList.remove('open');
+  _modalEl.setAttribute('aria-hidden','true');
   // Reset any leftover swipe-drag transform from the bottom-sheet gesture so
   // the next open starts cleanly.
   const _sheet=_modalEl&&_modalEl.querySelector('.modal');
