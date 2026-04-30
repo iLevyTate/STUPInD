@@ -1527,6 +1527,21 @@ function showTab(tab){
   };
 })();
 
+// Session completion summary: celebrate work phase completion with closure toast
+window.showPomodoroSummary=function(){
+  const pomosToday=window.totalPomos||0;
+  const activeId=window.activeTaskId;
+  let taskName='';
+  if(activeId&&typeof window.findTask==='function'){
+    const t=window.findTask(activeId);
+    taskName=t?.name||'';
+  }
+  const msg=taskName?'Focus session complete — '+taskName:'Focus session complete!';
+  if(typeof window.showActionToast==='function'){
+    window.showActionToast(msg+(pomosToday>1?' · '+pomosToday+' today':''),null,null,5000);
+  }
+};
+
 // ========== FLOATING MINI TIMER ==========
 // Show the mini-timer when not on the Timer (focus) tab. Click it to jump to Timer.
 window.toggleSimilarAccordion = function(){

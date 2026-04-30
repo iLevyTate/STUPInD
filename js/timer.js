@@ -165,6 +165,8 @@ function onPhaseComplete(){
   audioScheduled=false;scheduledAudio=[];
   // System notification for backgrounded tabs
   notify(getPL(phase)+' Complete',phase==='work'?'Great work! Time for a break.':'Break over — back to focus.');
+  // Show in-app summary toast after work phase completes
+  if(phase==='work'&&typeof window.showPomodoroSummary==='function')window.showPomodoroSummary();
   gid('display').className='ring-time done';gid('display').textContent='00:00';gid('phaseLabel').textContent=getPL(phase)+' Complete';
   renderStats();renderCtrls();_syncRingState();renderTaskList();updateTitle();saveState('auto');
   if(phase==='work'&&cfg.autoBreak)setTimeout(()=>{if(finished)advancePhase()},1500);
