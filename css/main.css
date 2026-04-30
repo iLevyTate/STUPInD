@@ -179,7 +179,7 @@
   .ring-wrap{display:flex;justify-content:center;margin-bottom:8px;position:relative}
   .ring-svg{width:200px;height:200px;transform:rotate(-90deg)}
   /* Ring track lifted from #121e2e (1.05:1 vs work-bg) to a visible groove. */
-  .ring-bg{fill:none;stroke:var(--bg-3);stroke-width:6}.ring-fg{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset .9s linear,stroke .4s}
+  .ring-bg{fill:none;stroke:var(--bg-3);stroke-width:6}.ring-fg{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset var(--dur-slow) linear,stroke var(--dur-fast) var(--ease-out)}
   .ring-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;display:flex;flex-direction:column;align-items:center}
   /* Done state lifted from #e74c3c to #ff5c4d for AA contrast on --work-bg. */
   .ring-time{font-size:48px;font-weight:800;letter-spacing:3px;transition:color .4s}
@@ -718,7 +718,7 @@
   .qt-time.warn{color:#e8a838;animation:pulse 1s infinite}
   .qt-time.done{color:#e74c3c}
   .qt-progress{height:3px;margin-top:6px;background:#152030;border-radius:2px;overflow:hidden}
-  .qt-bar{height:100%;background:linear-gradient(90deg,#2471a3,#3d8bcc);transition:width .5s linear}
+  .qt-bar{height:100%;background:linear-gradient(90deg,#2471a3,#3d8bcc);transition:width var(--dur-base) var(--ease-out)}
   .qt-bar.done{background:#e74c3c}
   .qt-actions{display:flex;gap:4px;flex-shrink:0}
   .qt-act{width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:0 0;border:1px solid #1e2838;border-radius:5px;color:#3a4a5a;font-size:11px;transition:.15s}
@@ -784,7 +784,7 @@
   .ring-wrap{position:relative;width:220px;height:220px;display:flex;align-items:center;justify-content:center}
   .ring-svg{width:220px;height:220px;transform:rotate(-90deg)}
   .ring-bg{fill:none;stroke:var(--bg-3);stroke-width:6}
-  .ring-fg{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1s linear}
+  .ring-fg{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset var(--dur-slow) linear}
   .ring-center{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px}
   .pips{display:flex;gap:10px;margin-top:4px}
   .ctrls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
@@ -1256,7 +1256,7 @@
   .task-list-progress-bar{
     height:100%;width:0%;
     background:linear-gradient(90deg,var(--accent),var(--purple));
-    transition:width .12s linear;
+    transition:width var(--dur-fast) linear;
   }
 
   /* Density segmented control. Three radio-buttons styled as one pill. */
@@ -2349,7 +2349,7 @@
   0%{transform:translateX(-100%)}
   100%{transform:translateX(320%)}
 }
-.gen-load-ribbon__track--indeterminate .gen-load-ribbon__bar{width:38%!important;transition:none;animation:genRibbonIndet 1.35s ease-in-out infinite}
+.gen-load-ribbon__track--indeterminate .gen-load-ribbon__bar{width:38%!important;transition:none;animation:genRibbonIndet 1.35s var(--ease-in-out) infinite}
 @media (max-width:480px){
   .gen-load-ribbon{padding:9px 12px;min-width:min(360px,96vw)}
   .gen-load-ribbon__txt{font-size:11px}
@@ -3037,7 +3037,7 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
   /* bottom respects iOS home indicator / Android nav bar via safe-area-inset */
   position:fixed;bottom:calc(28px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(16px);z-index:9000;
   padding:10px 18px;border-radius:10px;background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);
-  font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;max-width:min(90vw,420px);text-align:center;
+  font-size:13px;opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out);max-width:min(90vw,420px);text-align:center;
 }
 .export-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
@@ -3051,7 +3051,7 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
   padding:10px 12px 10px 18px;border-radius:999px;
   background:var(--bg-1);border:1px solid var(--border-strong);color:var(--text-1);
   font-size:var(--fs-13);box-shadow:var(--shadow-3);
-  opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;
+  opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out);
   max-width:min(90vw,420px);
 }
 .action-toast.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
@@ -3177,9 +3177,9 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
     0%,100%{filter:drop-shadow(0 0 6px var(--long-glow))}
     50%{filter:drop-shadow(0 0 14px var(--long-glow))}
   }
-  .ring-wrap.ring-running.work .ring-fg{animation:ringPulse 2.4s ease-in-out infinite}
-  .ring-wrap.ring-running.short .ring-fg{animation:ringPulseShort 2.4s ease-in-out infinite}
-  .ring-wrap.ring-running.long .ring-fg{animation:ringPulseLong 2.4s ease-in-out infinite}
+  .ring-wrap.ring-running.work .ring-fg{animation:ringPulse 2.4s ease-in-out infinite;will-change:filter}
+  .ring-wrap.ring-running.short .ring-fg{animation:ringPulseShort 2.4s ease-in-out infinite;will-change:filter}
+  .ring-wrap.ring-running.long .ring-fg{animation:ringPulseLong 2.4s ease-in-out infinite;will-change:filter}
 
   /* === STAGGERED PANEL PAGE-LOAD ENTRY === */
   @keyframes panelEnter{
@@ -3257,7 +3257,7 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
   .action-toast-lbl{flex:1;font-size:var(--fs-13);font-weight:600}
   .action-toast-btn{align-self:flex-start}
   .action-toast-progress{height:3px;border-radius:999px;background:var(--border);overflow:hidden;margin-top:2px}
-  .action-toast-progress-bar{height:100%;background:var(--accent);border-radius:999px;transition:width 0.1s linear}
+  .action-toast-progress-bar{height:100%;background:var(--accent);border-radius:999px;transition:width 0.1s linear;will-change:width}
   .action-toast-kbd-hint{font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-top:1px}
 
   /* === TYPOGRAPHIC PROPORTION === */
@@ -3526,6 +3526,44 @@ body:has(.offline-indicator:not([style*="display:none"])){ padding-top:30px; }
   margin-block-start:var(--space-5);line-height:1.6;
 }
 .task-empty-example-tokens{color:var(--accent);margin-inline-start:6px}
+
+/* Empty state CTA button emphasis */
+.first-task-btn {
+  background: var(--accent);
+  color: var(--bg-0);
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: var(--r-md);
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-14);
+  transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  box-shadow: 0 2px 8px rgba(106, 168, 255, 0.28);
+  margin-block: var(--space-4);
+}
+
+.first-task-btn:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 14px rgba(106, 168, 255, 0.36);
+}
+
+.first-task-btn:active {
+  transform: scale(0.97);
+}
+
+.first-task-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+body.light-theme .first-task-btn {
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22);
+}
+
+body.light-theme .first-task-btn:hover {
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.30);
+}
+
 .mfield--readonly{
   background:var(--bg-0)!important;cursor:default!important;color:var(--text-2);
   border-color:var(--border)!important;
@@ -3730,6 +3768,32 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
     min-width:36px;min-height:36px;
     padding:4px;
   }
+
+  /* Expand touch targets for small icon buttons */
+  .priority-flag,
+  .task-star,
+  .task-restore,
+  .qt-act,
+  .task-rm,
+  .modal-close {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+  }
+
+  /* Toggle switch touch target */
+  .toggle {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px;
+  }
+
+  /* Header buttons touch target */
+  .header-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px;
+  }
 }
 
 /* Starred indicator: gold left-stripe on the board card */
@@ -3773,6 +3837,7 @@ button.hist-day{display:block;width:100%;font:inherit;cursor:pointer;background:
   margin-block-end: var(--space-4);
   font-size: 48px;
   animation: gentlePulse 3s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 /* Gentle pulse for empty state icons to draw attention */
@@ -3828,4 +3893,67 @@ textarea[aria-invalid="false"],
 select[aria-invalid="false"] {
   border-color: #27ae60;
   background: rgba(39, 174, 96, 0.04);
+}
+
+/* === HIGH CONTRAST MODE (FORCED COLORS) SUPPORT === */
+/* User-facing high-contrast preferences (Windows High Contrast, some OS settings) */
+@media (forced-colors: active) {
+  /* Form inputs with errors stand out */
+  input[aria-invalid="true"],
+  textarea[aria-invalid="true"],
+  select[aria-invalid="true"] {
+    border: 2px solid CanvasText;
+    background: Canvas;
+  }
+
+  /* All buttons get clear outlines */
+  button,
+  .btn, .btn-primary, .btn-ghost, .btn-danger,
+  .task-add,
+  .action-toast-btn,
+  .ta-btn,
+  .nav-tab,
+  .sv-chip {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  /* Modals and dialogs clearly outlined */
+  .modal,
+  .modal-overlay,
+  .cmdk-overlay,
+  .cmdk-panel {
+    border: 2px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  /* Focus indicators become more visible */
+  *:focus-visible {
+    outline: 3px solid CanvasText;
+    outline-offset: 2px;
+  }
+
+  /* Links in text are underlined for distinction */
+  a {
+    text-decoration: underline;
+  }
+
+  /* Input focus state clearly visible */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+  }
+
+  /* Disabled state has reduced contrast but stays readable */
+  input:disabled,
+  button:disabled,
+  select:disabled {
+    opacity: 0.6;
+    border-color: GrayText;
+    color: GrayText;
+  }
 }

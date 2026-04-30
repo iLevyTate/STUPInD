@@ -273,7 +273,13 @@ async function addTask(){
       }
     }, 5000);
   }
-  saveState('user')
+  saveState('user');
+  // Focus restoration: return focus to task input after task is added
+  // so user can immediately add another task without clicking
+  setTimeout(() => {
+    const inp = gid('taskInput');
+    if(inp) inp.focus();
+  }, 50);
 }
 
 function showQaHint(){
@@ -842,6 +848,8 @@ async function removeTask(id){
     }
     for(const rid of toRemove) _taskIndexRemove(rid);
     tasks=tasks.filter(t=>!toRemove.includes(t.id));
+    // Screen reader announcement
+    if(typeof announce==='function') announce('Task permanently deleted: '+task.name);
     if(typeof syncTaskDels==='object'&&syncTaskDels){
       const t = Date.now();
       for(const rid of toRemove) syncTaskDels[rid]=t;
@@ -876,7 +884,12 @@ async function removeTask(id){
       }, 5000);
     }
   }
-  renderTaskList();renderBanner();saveState('user')
+  renderTaskList();renderBanner();saveState('user');
+  // Focus restoration: return focus to task input after removal/archiving
+  setTimeout(() => {
+    const inp = gid('taskInput');
+    if(inp) inp.focus();
+  }, 50);
 }
 
 function restoreTask(id){
@@ -966,7 +979,12 @@ function setSmartView(v){
   // is collapsed-to-active so the task header stays compact; users can opt
   // into the always-expanded layout with the `All views ▾` toggle.
   _applySmartViewsCollapsed(!smartViewsExpanded);
-  renderTaskList();saveState('user')
+  renderTaskList();saveState('user');
+  // Screen reader announcement for view change
+  if(typeof announce==='function') {
+    const viewName = document.querySelector('.sv-chip[data-view="'+v+'"]')?.textContent || v;
+    announce('Showing ' + viewName + ' view');
+  }
 }
 
 /**
@@ -1843,11 +1861,14 @@ function renderTaskList(){
       btn.type = 'button';
       btn.className = 'first-task-btn';
       btn.textContent = '+ Add your first task';
+      btn.setAttribute('aria-label', 'Add your first task to get started');
       btn.onclick = () => {
         const i = gid('taskInput');
         if(i){ i.focus(); i.select(); }
       };
       empty.appendChild(btn);
+      // Focus the CTA button for better keyboard accessibility in empty state
+      setTimeout(() => btn.focus(), 100);
       const cmdkLine = document.createElement('div');
       cmdkLine.className = 'task-empty-help';
       cmdkLine.append('Or press ');

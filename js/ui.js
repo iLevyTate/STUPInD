@@ -1498,7 +1498,19 @@ document.addEventListener('keydown',e=>{
 function addLog(name,durSec,type){timeLog.unshift({id:++logIdCtr,name,durSec,type,time:timeNow()});renderLog();saveState('user')}
 function removeLog(id){timeLog=timeLog.filter(l=>l.id!==id);renderLog();saveState('user')}
 function renderLog(){const list=gid('logList');list.querySelectorAll('.log-item').forEach(e=>e.remove());if(!timeLog.length){gid('logEmpty').hidden = false;return}gid('logEmpty').hidden = true;timeLog.slice(0,40).forEach(l=>{const d=document.createElement('div');d.className='log-item';const col=l.type==='work'?'var(--work)':l.type==='short'?'var(--short)':l.type==='quick'?'#48b5e0':'var(--long)';const lid=l.id||0;const dot=document.createElement('div');dot.className='log-dot';dot.style.background=col;d.appendChild(dot);const nm=document.createElement('span');nm.className='log-name';nm.textContent=l.name;d.appendChild(nm);const dur=document.createElement('span');dur.className='log-dur';dur.textContent=fmtShort(l.durSec);d.appendChild(dur);const tm=document.createElement('span');tm.className='log-time';tm.textContent=l.time;d.appendChild(tm);if(lid){const del=document.createElement('button');del.className='log-del';del.title='Remove';del.textContent='�';del.onclick=function(){removeLog(lid)};d.appendChild(del)}list.appendChild(d)})}
-function clearLog(){timeLog=[];renderLog();saveState('user')}
+function clearLog(){
+  timeLog=[];
+  renderLog();
+  saveState('user');
+  // Screen reader announcement
+  if(typeof announce==='function') announce('Session log cleared');
+  // Focus restoration: return focus to log area after clearing
+  // This helps keyboard users understand the action was completed
+  const logContainer = gid('logList');
+  if(logContainer) {
+    setTimeout(() => logContainer.focus(), 50);
+  }
+}
 
 // ========== TAB NAVIGATION ==========
 function showTab(tab){
